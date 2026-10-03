@@ -94,7 +94,8 @@ def probe_provider_dynamically(name: str, p_cfg: Dict[str, Any], d_cfg: Dict[str
             "notes": ["Domain unreachable"]
         }
 
-    l3_stat = "PASS" if smoke.get("searchQuery") else "SKIPPED"
+    # A configured query is not evidence that a search request succeeded.
+    l3_stat = "UNVERIFIED" if smoke.get("searchQuery") else "SKIPPED"
 
     # 3. L4 Detail reachability
     if not known_detail:

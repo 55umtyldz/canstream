@@ -5,15 +5,17 @@ manage_health_issues.py
 Automates GitHub Issue creation, deduplication, lifecycle management, and closing:
 - Checks reports/provider-health.json, reports/domain-health.json, and config/
 - Interacts with GitHub REST API using $GITHUB_TOKEN and $GITHUB_REPOSITORY
-- Dedup: Prevents duplicate issues between domain-watch and security-alert
-- Stale Lifecycle: Automatically closes issues for dead or disabled providers (e.g. DiziPal, Sinewix, FilmHane, DiziMom)
-- Recovery: Closes all open failure and warning issues when a provider becomes healthy
-- Tier Recovery: Closes tier-specific issues (e.g. L1 regression) when that tier has returned to PASS
+- Dedup: Identifies issues by provider and problem type, across monitor sources
+- Inactive providers: Suppresses churn without claiming recovery
+- Recovery: Closes only the specific automated health tier proven recovered
+- Updates: Comments only when material evidence changes
 """
 
 import os
 import sys
 import json
+import hashlib
+import re
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
@@ -45,8 +47,16 @@ def github_api(endpoint, method="GET", data=None):
         return None
 
 def get_open_issues():
-    issues = github_api("/issues?state=open&per_page=100")
-    return issues or []
+    issues = []
+    page = 1
+    while True:
+        batch = github_api(f"/issues?state=open&per_page=100&page={page}")
+        if batch is None:
+            return None
+        issues.extend(i for i in batch if "pull_request" not in i)
+        if len(batch) < 100:
+            return issues
+        page += 1
 
 def create_issue(title, body, labels):
     print(f"[Issue] Creating issue: '{title}' with labels: {labels}")
@@ -60,9 +70,11 @@ def add_comment(issue_number, comment):
 
 def close_issue(issue_number, reason="Provider health checks passed"):
     print(f"[Issue] Closing issue #{issue_number}: {reason}")
-    add_comment(issue_number, f"### Resolution Update\n\n{reason}\n\nAuto-closing issue at {datetime.now(timezone.utc).isoformat()}.")
     data = {"state": "closed"}
-    return github_api(f"/issues/{issue_number}", method="PATCH", data=data)
+    result = github_api(f"/issues/{issue_number}", method="PATCH", data=data)
+    if result is not None:
+        add_comment(issue_number, f"### Resolution Update\n\n{reason}\n\nAuto-closed issue at {datetime.now(timezone.utc).isoformat()}.")
+    return result
 
 def find_provider_for_issue(issue, provider_names):
     labels = [lbl.get("name", "") for lbl in issue.get("labels", [])]
@@ -75,171 +87,167 @@ def find_provider_for_issue(issue, provider_names):
             return p
     return None
 
+def issue_labels(issue):
+    return {label.get("name", "") for label in issue.get("labels", [])}
+
+
+def issue_metadata(issue):
+    match = re.search(r"<!-- health-state: (.*?) -->", issue.get("body") or "")
+    if match:
+        try:
+            value = json.loads(match.group(1))
+            return value if isinstance(value, dict) else {}
+        except (ValueError, TypeError):
+            pass
+    return {}
+
+
+def problem_type(issue):
+    labels = issue_labels(issue)
+    # Restrict legacy recognition to this monitor's issues; never match user playback bugs.
+    if not labels.intersection({"domain-watch", "provider-health", "untrusted-redirect", "selector-drift"}):
+        return None
+    metadata = issue_metadata(issue)
+    if metadata.get("problem_type"):
+        return metadata["problem_type"]
+    title = issue.get("title", "")
+    if "untrusted-redirect" in labels or title.startswith("[Security Alert]") or title.startswith("[Domain Watch]"):
+        return "untrusted_redirect"
+    for tier in ("L0_config", "L1_domain"):
+        if f"{tier} regression" in title:
+            return tier
+    if "selector-drift" in labels:
+        return "selector_drift"
+    return None
+
+
+def latest_issue_metadata(issue, kind):
+    metadata = issue_metadata(issue)
+    page = 1
+    while True:
+        comments = github_api(f"/issues/{issue['number']}/comments?per_page=100&page={page}")
+        if comments is None:
+            return None
+        for comment in comments:
+            state = issue_metadata(comment)
+            if state.get("problem_type") == kind and state.get("fingerprint"):
+                metadata = state
+        if len(comments) < 100:
+            return metadata
+        page += 1
+
+
+def recorded_tiers(issue, metadata):
+    if metadata.get("tiers"):
+        return metadata["tiers"]
+    kind = problem_type(issue)
+    if kind in ("L0_config", "L1_domain"):
+        return [kind]
+    if kind == "selector_drift":
+        # Legacy issues record drifted tiers on this specific line.
+        match = re.search(r"\*\*Drifted Tier\(s\):\*\* ([^\n]+)", issue.get("body") or "")
+        return re.findall(r"L[0-5]_[a-z_]+", match.group(1)) if match else []
+    return []
+
+
+def update_problem(issues, provider, kind, title, body, labels, evidence, tiers=None):
+    fingerprint = hashlib.sha256(json.dumps(evidence, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
+    existing = next((i for i in issues if find_provider_for_issue(i, [provider]) == provider and problem_type(i) == kind), None)
+    latest = {}
+    pending_tiers = set(tiers or [])
+    if existing is not None:
+        # Read all comments: an earlier matching state must not suppress a later A -> B -> A change.
+        latest = latest_issue_metadata(existing, kind)
+        if latest is None:
+            return  # Fail closed when we cannot establish the previous state.
+        current = evidence.get("provider", {}).get("tierResults", {})
+        pending_tiers.update(t for t in recorded_tiers(existing, latest)
+                             if current.get(t) not in ("pass", "player_discovered"))
+    metadata = {"provider": provider, "problem_type": kind, "fingerprint": fingerprint, "tiers": sorted(pending_tiers)}
+    marker = "<!-- health-state: " + json.dumps(metadata, sort_keys=True) + " -->"
+    if existing is None:
+        created = create_issue(title, body + "\n\n" + marker, labels)
+        if created:
+            issues.append(created)
+        return
+    if latest.get("fingerprint") != fingerprint or latest.get("tiers", []) != metadata["tiers"]:
+        add_comment(existing["number"], body + "\n\n" + marker)
+
+
 def main():
     if not GITHUB_TOKEN or not GITHUB_REPOSITORY:
         print("[Issue Manager] GITHUB_TOKEN or GITHUB_REPOSITORY not set. Running in dry-run mode.")
         return
 
     repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    prov_file = os.path.join(repo_root, "reports", "provider-health.json")
-    dom_file = os.path.join(repo_root, "reports", "domain-health.json")
-    prov_cfg_file = os.path.join(repo_root, "config", "providers.json")
-    dom_cfg_file = os.path.join(repo_root, "config", "domains.json")
 
-    # Load configuration
-    providers_cfg = {}
-    if os.path.exists(prov_cfg_file):
-        with open(prov_cfg_file, "r", encoding="utf-8") as f:
-            for p in json.load(f).get("providers", []):
-                providers_cfg[p["name"]] = p
+    def load(relative, default):
+        path = os.path.join(repo_root, relative)
+        if not os.path.exists(path):
+            return default
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-    domains_cfg = {}
-    if os.path.exists(dom_cfg_file):
-        with open(dom_cfg_file, "r", encoding="utf-8") as f:
-            domains_cfg = json.load(f).get("providers", {})
-
-    all_provider_names = sorted(list(set(list(providers_cfg.keys()) + list(domains_cfg.keys()))))
-
-    prov_reports = []
-    if os.path.exists(prov_file):
-        with open(prov_file, "r", encoding="utf-8") as f:
-            prov_reports = json.load(f)
-
-    dom_reports = []
-    if os.path.exists(dom_file):
-        with open(dom_file, "r", encoding="utf-8") as f:
-            dom_reports = json.load(f)
-
+    providers_cfg = {p["name"]: p for p in load("config/providers.json", {}).get("providers", [])}
+    domains_cfg = load("config/domains.json", {}).get("providers", {})
+    prov_reports = load("reports/provider-health.json", [])
+    dom_reports = load("reports/domain-health.json", [])
+    names = sorted(set(providers_cfg) | set(domains_cfg))
     workflow_url = f"{SERVER_URL}/{GITHUB_REPOSITORY}/actions/runs/{RUN_ID}" if RUN_ID else "N/A"
-    open_issues = get_open_issues()
+    issues = get_open_issues()
+    if issues is None:
+        return  # Do not create duplicates when fetching existing issues failed.
 
-    # 1. Stale Lifecycle Management: Close open issues for disabled or dead providers
-    closed_issue_ids = set()
-    for issue in open_issues:
-        issue_num = issue["number"]
-        prov_name = find_provider_for_issue(issue, all_provider_names)
-        if not prov_name:
+    def inactive(name):
+        return not providers_cfg.get(name, {}).get("enabled", True) or domains_cfg.get(name, {}).get("status") == "dead"
+
+    reports = {p.get("provider"): p for p in prov_reports}
+    domains = {d.get("provider"): d for d in dom_reports}
+    closed = set()
+    for issue in issues:
+        name = find_provider_for_issue(issue, names)
+        if not name or inactive(name):
             continue
-
-        p_cfg = providers_cfg.get(prov_name)
-        d_cfg = domains_cfg.get(prov_name, {})
-
-        is_disabled = p_cfg and not p_cfg.get("enabled", True)
-        is_dead = d_cfg.get("status") == "dead"
-        disabled_reason = (p_cfg.get("disabledReason") if p_cfg else None) or "Provider marked as dead/disabled in repository config"
-
-        if is_disabled or is_dead:
-            close_issue(
-                issue_num,
-                f"Provider `{prov_name}` is inactive/disabled in the repository (`{disabled_reason}`). Closing stale issue."
-            )
-            closed_issue_ids.add(issue_num)
-
-    # Filter out issues that were just closed
-    active_open_issues = [i for i in open_issues if i["number"] not in closed_issue_ids]
-
-    # Map reports for quick lookup
-    prov_rep_map = {p.get("provider"): p for p in prov_reports}
-    dom_rep_map = {d.get("provider"): d for d in dom_reports}
-
-    # 2. Process Recovery for Healthy Providers or Resolved Tiers
-    for p in prov_reports:
-        name = p.get("provider")
-        overall = p.get("overallStatus")
-        tiers = p.get("tierResults", {})
-
-        related_issues = [
-            i for i in active_open_issues
-            if find_provider_for_issue(i, [name]) == name
-        ]
-
-        if overall == "healthy" and related_issues:
-            for iss in related_issues:
-                close_issue(iss["number"], f"Provider `{name}` passed all health checks across L0-L5 and is now HEALTHY.")
-                closed_issue_ids.add(iss["number"])
-        else:
-            # Check if specific tier issues can be resolved (e.g. L1 passed, but provider still degraded)
-            for iss in related_issues:
-                title = iss.get("title", "")
-                if "L1_domain regression" in title and tiers.get("L1_domain") == "pass":
-                    close_issue(iss["number"], f"Provider `{name}` L1_domain check has recovered to PASS. Resolving this tier issue.")
-                    closed_issue_ids.add(iss["number"])
-                elif "L0_config regression" in title and tiers.get("L0_config") == "pass":
-                    close_issue(iss["number"], f"Provider `{name}` L0_config check has recovered to PASS. Resolving this tier issue.")
-                    closed_issue_ids.add(iss["number"])
-
-    active_open_issues = [i for i in active_open_issues if i["number"] not in closed_issue_ids]
-
-    # 3. Process Domain Health Reports
-    for d in dom_reports:
-        name = d.get("provider")
-        status = d.get("status")
-        candidate = d.get("candidateHost")
-
-        # Skip dead or disabled providers
-        p_cfg = providers_cfg.get(name)
-        d_cfg = domains_cfg.get(name, {})
-        if (p_cfg and not p_cfg.get("enabled", True)) or d_cfg.get("status") == "dead":
+        # L0-L5 evidence cannot resolve security, playback or unrecognized issues.
+        kind = problem_type(issue)
+        if kind not in ("L0_config", "L1_domain", "selector_drift") or issue_labels(issue).intersection({"security", "playback"}):
             continue
+        metadata = latest_issue_metadata(issue, kind)
+        if metadata is None:
+            continue
+        tiers = recorded_tiers(issue, metadata)
+        current = reports.get(name, {}).get("tierResults", {})
+        if tiers and all(current.get(t) in ("pass", "player_discovered") for t in tiers):
+            # A conflicting domain report is not recovery evidence for L1.
+            if "L1_domain" in tiers and name in domains and domains[name].get("status") != "healthy":
+                continue
+            if close_issue(issue["number"], f"Provider `{name}` recovered the originally failing tier(s): {', '.join(tiers)}. Playback remains unverified.") is not None:
+                closed.add(issue["number"])
+    issues = [i for i in issues if i["number"] not in closed]
 
-        labels = ["domain-watch", "automated", name]
-
-        if status == "untrusted_redirect" or candidate:
-            existing = [
-                i for i in active_open_issues
-                if find_provider_for_issue(i, [name]) == name and
-                ("domain-watch" in [lbl["name"] for lbl in i.get("labels", [])] or "security" in [lbl["name"] for lbl in i.get("labels", [])])
-            ]
-            body = f"""## [Domain Watch] Possible Domain Change Detected\n\n- **Provider:** {name}\n- **Checked At:** {datetime.now(timezone.utc).isoformat()}\n- **Canonical Domain:** {d.get('canonical')}\n- **Final URL:** {d.get('finalUrl')}\n- **Candidate Host:** {candidate}\n- **HTTPS Valid:** {d.get('httpsValid')}\n- **Marker Found:** {d.get('markerFound')}\n- **Redirect Chain:** `{d.get('redirectChain')}`\n- **Workflow Run:** {workflow_url}\n\n*Manual review required before updating config/domains.json.*"""
-            if not existing:
-                create_issue(f"[Domain Watch] {name} possible domain change", body, labels)
-            else:
-                add_comment(existing[0]["number"], f"Automated check update: Status is still `{status}` with candidate `{candidate}`.\nRun: {workflow_url}")
-
-    # 4. Process Provider Health Reports
-    for p in prov_reports:
-        name = p.get("provider")
-        overall = p.get("overallStatus")
-        tiers = p.get("tierResults", {})
+    for name in sorted(set(reports) | set(domains)):
+        if not name or inactive(name):
+            continue
+        report = reports.get(name, {})
+        domain = domains.get(name, {})
+        tiers = report.get("tierResults", {})
+        # Keep only stable evidence; checkedAt, durationMs and workflow run IDs are presentation data.
+        fields = ("canonical", "finalUrl", "candidateHost", "tierResults", "diagnostic", "status", "httpsValid", "hostAllowed", "markerFound", "redirectChain", "error")
+        evidence = {source: {k: data[k] for k in fields if k in data} for source, data in (("provider", report), ("domain", domain))}
+        details = json.dumps(evidence, indent=2, sort_keys=True, ensure_ascii=True)
+        body = f"**Provider:** {name}\n\n```json\n{details}\n```\n\nWorkflow Run: {workflow_url}"
         labels = ["provider-health", "automated", name]
+        if tiers.get("L1_domain") == "untrusted_redirect" or domain.get("status") == "untrusted_redirect" or domain.get("candidateHost"):
+            candidate = report.get("candidateHost") or domain.get("candidateHost")
+            update_problem(issues, name, "untrusted_redirect", f"[Security Alert] {name} — untrusted redirect to {candidate}", body + "\n\nManual review required before changing allowed domains.", labels + ["domain-watch", "untrusted-redirect", "security"], evidence)
+        for tier in ("L0_config", "L1_domain"):
+            status = tiers.get(tier, "")
+            if status.startswith("fail") or status in ("config_error", "content_marker_mismatch"):
+                update_problem(issues, name, tier, f"[Provider Health] {name} — {tier} regression", body, labels + ["critical"], evidence, [tier])
+        drift_tiers = sorted(k for k, v in tiers.items() if v == "drift_detected")
+        if drift_tiers:
+            update_problem(issues, name, "selector_drift", f"[Selector Drift] {name} — upstream DOM mutation detected", body, labels + ["selector-drift"], evidence, drift_tiers)
 
-        existing = [
-            i for i in active_open_issues
-            if find_provider_for_issue(i, [name]) == name and "provider-health" in [lbl["name"] for lbl in i.get("labels", [])]
-        ]
-
-        is_untrusted = tiers.get("L1_domain") == "untrusted_redirect" or p.get("overallStatus") == "critical"
-        is_critical_fail = tiers.get("L0_config") == "fail" or (tiers.get("L1_domain") and tiers["L1_domain"].startswith("fail"))
-        is_drift = any(v == "drift_detected" for v in tiers.values())
-
-        if is_untrusted:
-            candidate = p.get("candidateHost")
-            body = f"""## [Provider Health] Untrusted Redirect Detected\n\n- **Provider:** {name}\n- **Checked At:** {p.get('checkedAt')}\n- **Canonical Domain:** {p.get('canonical')}\n- **Final URL:** {p.get('finalUrl')}\n- **Candidate Host:** {candidate}\n- **Tier Results:** `{tiers}`\n- **Workflow Run:** {workflow_url}\n\n*Urgent review required: The domain redirected outside allowed destination hosts.*"""
-            untrusted_existing = [i for i in existing if "untrusted-redirect" in [lbl["name"] for lbl in i.get("labels", [])]]
-            if not untrusted_existing:
-                create_issue(f"[Security Alert] {name} — untrusted redirect to {candidate}", body, labels + ["untrusted-redirect", "security"])
-            else:
-                add_comment(untrusted_existing[0]["number"], f"Automated health update: Still redirecting to untrusted host `{candidate}`.\nRun: {workflow_url}")
-
-        elif is_critical_fail:
-            failed_tier = "L0_config" if tiers.get("L0_config") == "fail" else "L1_domain"
-            err_msg = p.get("diagnostic", {}).get(failed_tier[:2], "Health check failure")
-            body = f"""## [Provider Health] Critical Failure Detected\n\n- **Provider:** {name}\n- **Checked At:** {p.get('checkedAt')}\n- **Failed Tier:** {failed_tier}\n- **Canonical Domain:** {p.get('canonical')}\n- **Final URL:** {p.get('finalUrl')}\n- **Diagnostic:** {err_msg}\n- **Tier Results:** `{tiers}`\n- **Workflow Run:** {workflow_url}\n\n*Automated issue opened by Provider Health Monitor.*"""
-            tier_existing = [i for i in existing if failed_tier in i.get("title", "")]
-            if not tier_existing:
-                create_issue(f"[Provider Health] {name} — {failed_tier} regression", body, labels + ["critical"])
-            else:
-                add_comment(tier_existing[0]["number"], f"Automated health update: {failed_tier} still failing. Diagnostic: {err_msg}\nRun: {workflow_url}")
-
-        elif is_drift:
-            drift_tiers = [k for k, v in tiers.items() if v == "drift_detected"]
-            candidates = p.get("diagnostic", {}).get("L2_candidates", [])
-            body = f"""## [Selector Drift] Upstream DOM Mutation Detected\n\n- **Provider:** {name}\n- **Checked At:** {p.get('checkedAt')}\n- **Drifted Tier(s):** {drift_tiers}\n- **Canonical Domain:** {p.get('canonical')}\n- **Candidate Elements Found:**\n```json\n{json.dumps(candidates, indent=2)}\n```\n- **Workflow Run:** {workflow_url}\n\n*Note: Adaptive search located candidate elements. Provider Kotlin selectors may need updating.*"""
-            drift_existing = [i for i in existing if "selector-drift" in [lbl["name"] for lbl in i.get("labels", [])]]
-            if not drift_existing:
-                create_issue(f"[Selector Drift] {name} — upstream DOM mutation detected", body, labels + ["selector-drift"])
-            else:
-                add_comment(drift_existing[0]["number"], f"Automated drift update: Candidate elements still active.\nRun: {workflow_url}")
 
 if __name__ == "__main__":
     main()

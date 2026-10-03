@@ -436,6 +436,89 @@ def check_l5_player_discovery(
         return "player_discovered", diag
     return "player_not_found", f"[{episode_discovery_mode}] No player iframe, video tag, or player script discovered at {target_url}"
 
+def check_json_api_profile(name, canonical, smoke_test, monitoring_cfg, fetcher, report):
+    """Probe catalog APIs without treating metadata as player discovery."""
+    tiers = report["tierResults"]
+    diagnostics = report["diagnostic"]
+    search_cfg = monitoring_cfg.get("search", {})
+    search_path = search_cfg.get("path", "")
+    if name == "CloudStreamHub":
+        key = urllib.parse.parse_qs(urlparse(search_path).query).get("api_key", [None])[0]
+        if not key:
+            tiers["L1_domain"] = "config_error"
+            diagnostics["L1"] = "Missing configured catalog API credential"
+            return
+        catalog_url = urljoin(canonical, "/3/trending/all/day") + "?" + urllib.parse.urlencode({"api_key": key, "language": "tr-TR"})
+    else:
+        catalog_url = urljoin(canonical, "/api/v2/list_movies.json?limit=20")
+
+    def request_json(url, headers=None):
+        response = fetcher.fetch(url, preferred_mode=FetchMode.HTTP,
+                                 allow_dynamic_fallback=False, allow_stealth_fallback=False,
+                                 headers=headers or {})
+        if response.status == FetchStatus.CONFIG_ERROR:
+            return "config_error", "API fetch configuration rejected", None, response
+        if response.status == FetchStatus.UNTRUSTED_REDIRECT:
+            return "untrusted_redirect", "API redirect rejected", None, response
+        if response.status in (FetchStatus.BLOCKED, FetchStatus.CLOUDFLARE) or response.cloudflare:
+            return "automation_blocked", "API request blocked", None, response
+        if response.status != FetchStatus.SUCCESS or response.statusCode != 200:
+            return "fail", f"API HTTP {response.statusCode}", None, response
+        try:
+            payload = json.loads(response.body)
+        except (ValueError, TypeError):
+            return "fail", "API returned non-JSON body", None, response
+        if not isinstance(payload, dict) or payload.get("success") is False:
+            return "fail", "API returned invalid/error object", None, response
+        if name == "YTS" and (payload.get("status") != "ok" or not isinstance(payload.get("data"), dict)):
+            return "fail", "YTS API status/data invalid", None, response
+        return "pass", None, payload, response
+
+    def valid_item(item):
+        return (isinstance(item, dict) and type(item.get("id")) is int and item["id"] > 0
+                and isinstance(item.get("title") or item.get("name"), str)
+                and bool((item.get("title") or item.get("name")).strip()))
+
+    def catalog_items(payload):
+        return payload.get("results") if name == "CloudStreamHub" else payload["data"].get("movies")
+
+    status, diagnostic, payload, response = request_json(catalog_url)
+    tiers["L1_domain"] = status
+    report["finalUrl"] = urlparse(response.finalUrl or "")._replace(query="", fragment="").geturl()
+    report["candidateHost"] = response.candidateHost
+    if diagnostic:
+        diagnostics["L1"] = diagnostic
+    if status != "pass":
+        return
+    items = catalog_items(payload)
+    tiers["L2_homepage"] = "pass" if isinstance(items, list) and any(valid_item(item) for item in items) else "fail"
+    diagnostics["L2"] = "Catalog JSON items checked; no playback evidence"
+
+    if search_path and smoke_test.get("searchQuery"):
+        search_url = urljoin(canonical, search_path.replace("{query}", urllib.parse.quote(smoke_test["searchQuery"], safe="")))
+        status, diagnostic, payload, _ = request_json(search_url, search_cfg.get("headers"))
+        if status == "pass":
+            items = catalog_items(payload)
+            status = "pass" if isinstance(items, list) and any(valid_item(item) for item in items) else "fail"
+        tiers["L3_search"] = status
+        diagnostics["L3"] = diagnostic or "Search JSON items checked"
+    detail_url = smoke_test.get("knownDetail")
+    if detail_url:
+        status, diagnostic, payload, _ = request_json(detail_url)
+        if status == "pass":
+            movie = payload if name == "CloudStreamHub" else payload["data"].get("movie")
+            if name == "CloudStreamHub":
+                expected_id = urlparse(detail_url).path.rstrip("/").split("/")[-1]
+            else:
+                expected_id = urllib.parse.parse_qs(urlparse(detail_url).query).get("movie_id", [None])[0]
+            status = "pass" if valid_item(movie) and str(movie["id"]) == expected_id else "fail"
+        tiers["L4_load"] = status
+        diagnostics["L4"] = diagnostic or "Detail JSON identity/title checked"
+    tiers["L5_player_discovery"] = "untested"
+    diagnostics["L5"] = ("Hub federation/player not executed" if name == "CloudStreamHub"
+                         else "Torrent metadata is not peer/file/player verification")
+
+
 def inspect_provider(provider, repo_root, domains_config, adaptive_mgr: AdaptiveManager):
     name = provider["name"]
     domain_key = provider.get("domainKey", name)
@@ -492,6 +575,9 @@ def inspect_provider(provider, repo_root, domains_config, adaptive_mgr: Adaptive
 
     # Fetcher session reuse context
     with ProviderFetcher(allowed_hosts=allowed_hosts, canonical=canonical, timeout=15) as fetcher:
+        if name in ("CloudStreamHub", "YTS"):
+            check_json_api_profile(name, canonical, smoke_test, monitoring_cfg, fetcher, report)
+            return finalize_and_return(report)
         # L1: Domain
         l1_res = fetcher.fetch(
             url=canonical,

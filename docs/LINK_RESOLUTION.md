@@ -2,6 +2,16 @@
 
 Bu doküman, oynatma verisinin kalıcılığı, `PlaybackPayload` tasarımı ve `loadLinks()` pipeline'ının detaylarını açıklar.
 
+## CloudStreamHub kaynak seçimi
+
+Hub, paketlenmiş etkin sağlayıcıları ayrıca kurulmalarını gerektirmeden kullanır. HTTP kaynakları hazır oldukça iletilir; Torrentio ve YTS adayları birlikte değerlendirilir. Sağlayıcı taraması, eşzamanlılık izni alındıktan sonra 30 saniye ile sınırlıdır ve aynı anda en fazla dört federasyon sağlayıcısı çalışır.
+
+Bulunan her çözünürlükte en fazla üç farklı torrent hash'i seçilir. Önce farklı kaynaklar, sonra seed sayısı ve sabit eşitlik sırası tercih edilir. Aynı hash'in tracker veya görüntülenen ad farklılıkları yeni bir alternatif oluşturmaz. Dosya indeksi eşdeğer adaylarda YTS tercih edilir; açıkça verilen Torrentio dosya indeksi değiştirilmez. HTTP/debrid bağlantıları bu kotaya dahil değildir. Önbellekteki torrentler, güncel sonucu olmayan kaynaklar için yedektir.
+
+Hub payload'ındaki isteğe bağlı `category` alanı `general`, `animation` veya `documentary` olabilir; önceki payload'lar geçerliliğini korur. Bölümlü içeriklerde istenen sezon/bölüm bulunamazsa başka bir bölüm açılmaz. Belgeselin film veya bölüm biçimi gerçek `load()` yanıtıyla doğrulanır.
+
+API yanıtı, seed sayısı, extractor callback'i veya derleme başarısı oynatma kanıtı değildir. Medya erişimi ve cihazda oynatma ayrı doğrulanır; dış kaynakta bulunmayan bir kalite listede üretilmez.
+
 ## 1. Kararlı Veri (Stable) vs. Geçici Veri (Ephemeral)
 
 | Tür | Açıklama | Saklama Yeri | Örnekler |
@@ -125,3 +135,11 @@ subtitleCallback(
 )
 ```
 ISO 639-1 dil kodları (`tr`, `en`, vb.) tercih edilmelidir.
+
+## 5. Torrent kaynaklarını dış oynatıcıda açma
+
+CloudStreamHub, CloudStream 4.8.0 üzerinde torrentler için iki ayrı bölüm menüsü seçeneği ekler: `CloudStreamHub: Torrent → VLC` ve `CloudStreamHub: Torrent → MX Player`. İlgili oynatıcı kurulu olduğunda görünürler; MX seçeneği ücretsiz `com.mxtech.videoplayer.ad` sürümünü kullanır.
+
+Bölüme uzun basın, Hub dış oynatıcı seçeneğini seçin ve kaynak listesinden istediğiniz torrenti açın. Eklenti, seçilen torrentin dosya indeksini değiştirmeden CloudStream torrent sunucusunun oluşturduğu HTTP akışını oynatıcıya aktarır. Mevcut oturumda torrent izni verilmemişse P2P onayı istenir.
+
+Bu aktarım CloudStream APK’sını ve varsayılan oynatıcı ayarını değiştirmez. Torrentin eşlere bağlanamamasını, cihazın codec/çözünürlük sınırlarını veya dış oynatıcının desteklemediği ses biçimlerini gidermez. CloudStream arka planda kapatılırsa yerel torrent akışı kesilir.

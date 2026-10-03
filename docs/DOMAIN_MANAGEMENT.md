@@ -16,6 +16,8 @@ Yeni mimaride **Kör Otomasyon Yasaktır**.
 
 Her eklentinin domain yapılandırması açık bir izin listesi (allowlist) ve içerik parmak izi (fingerprint) ile denetlenir:
 
+Çalışma zamanı çözücüsü `main/config/domains.json` dosyasındaki `providers` haritasını okur. Önce `canonical`, ardından varsa `mirrors` adresleri kullanılır; adresler HTTPS olmalı ve hostları `allowedHosts` içinde bulunmalıdır. `allowedHosts` bir URL veya ayna listesi değildir. Geçersiz ya da başarısız yenilemede son geçerli yapılandırma, yoksa sağlayıcının varsayılan adresi korunur.
+
 ```json
 {
   "schemaVersion": 1,

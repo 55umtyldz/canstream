@@ -8,6 +8,9 @@ import com.cloudstream.tr.core.model.ProviderModels
 import com.cloudstream.tr.core.network.StreamValidator
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
+import java.net.URLEncoder
+import java.net.URI
+import com.cloudstream.tr.core.network.SafeHttpClient
 
 class JetFilmIzle : MainAPI() {
     override var mainUrl = "https://jetfilmizle.now"
@@ -19,46 +22,52 @@ class JetFilmIzle : MainAPI() {
 
     override val mainPage = mainPageOf(
         "${mainUrl}/" to "Son Eklenenler",
-        "${mainUrl}/kategori/aksiyon-filmleri-izle/" to "Aksiyon",
-        "${mainUrl}/kategori/bilim-kurgu-filmleri-izle/" to "Bilim Kurgu",
-        "${mainUrl}/kategori/komedi-filmleri-izle/" to "Komedi",
-        "${mainUrl}/kategori/korku-filmleri-izle/" to "Korku",
-        "${mainUrl}/kategori/macera-filmleri-izle/" to "Macera",
-        "${mainUrl}/kategori/dram-filmleri-izle/" to "Dram",
-        "${mainUrl}/kategori/animasyon-filmleri-izle/" to "Animasyon"
+        "${mainUrl}/tur/aksiyon" to "Aksiyon",
+        "${mainUrl}/tur/bilim-kurgu" to "Bilim Kurgu",
+        "${mainUrl}/tur/komedi" to "Komedi",
+        "${mainUrl}/tur/korku" to "Korku",
+        "${mainUrl}/tur/macera" to "Macera",
+        "${mainUrl}/tur/dram" to "Dram",
+        "${mainUrl}/tur/animasyon" to "Animasyon"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val targetUrl = if (page <= 1) {
-            request.data
-        } else {
-            val base = request.data.removeSuffix("/")
-            "$base/page/$page/"
-        }
+        val targetUrl = mainPageUrl(request.data, page)
 
         val doc = app.get(targetUrl).document
-        val items = doc.select("article.movie, article.post, div.movie-item, div.film-kutusu").mapNotNull { el ->
-            parseSearchItem(el)
-        }.distinctBy { it.url }
+        val items = parseSearchPage(doc)
 
-        return newHomePageResponse(request.name, items, hasNext = items.isNotEmpty())
+        return newHomePageResponse(request.name, items, hasNext = hasNextPage(doc, page))
     }
 
     override suspend fun search(query: String, page: Int): SearchResponseList {
-        val targetUrl = if (page <= 1) {
-            "${mainUrl}/?s=${query}"
-        } else {
-            "${mainUrl}/page/$page/?s=${query}"
-        }
-
-        val doc = app.get(targetUrl).document
-        val items = doc.select("article.movie, article.post, div.movie-item, div.film-kutusu").mapNotNull { el ->
-            parseSearchItem(el)
-        }
-        val deduped = ProviderModels.dedupSearchResults(items)
-
-        return newSearchResponseList(deduped, hasNext = deduped.isNotEmpty())
+        val doc = app.get(searchUrl(query, page)).document
+        val items = parseSearchPage(doc)
+        return newSearchResponseList(items, hasNext = hasNextPage(doc, page))
     }
+
+    internal fun mainPageUrl(baseUrl: String, page: Int): String {
+        if (page <= 1) return baseUrl
+        val base = baseUrl.removeSuffix("/")
+        return if (base == mainUrl.removeSuffix("/")) "$mainUrl/filmler/sayfa-$page"
+        else "$base/sayfa-$page"
+    }
+
+    internal fun searchUrl(query: String, page: Int): String {
+        val path = if (page <= 1) "/arama" else "/search/sayfa-$page"
+        return "$mainUrl$path?q=${URLEncoder.encode(query, "UTF-8")}"
+    }
+
+    internal fun parseSearchPage(doc: Document): List<SearchResponse> =
+        ProviderModels.dedupSearchResults(
+            doc.select("div.film-card, article.movie, article.post, div.movie-item, div.film-kutusu")
+                .mapNotNull(::parseSearchItem)
+        )
+
+    internal fun hasNextPage(doc: Document, page: Int): Boolean =
+        doc.select("a[href]").any {
+            it.attr("href").substringBefore('?').trimEnd('/').endsWith("/sayfa-${page + 1}")
+        }
 
     override suspend fun quickSearch(query: String): List<SearchResponse>? = search(query, 1).items
 
@@ -68,7 +77,7 @@ class JetFilmIzle : MainAPI() {
         if (href == mainUrl || href == "${mainUrl}/") return null
 
         val imgEl = element.selectFirst("img")
-        val title = element.selectFirst(".title, h2, h3, .entry-title")?.text()?.trim()
+        val title = element.selectFirst(".card-title, .title, h2, h3, .entry-title")?.text()?.trim()
             ?: imgEl?.attr("alt")?.trim()
             ?: linkEl.attr("title").trim()
         if (title.isBlank()) return null
@@ -79,8 +88,8 @@ class JetFilmIzle : MainAPI() {
                 ?: imgEl?.attr("src")?.ifBlank { null }
         )
 
-        val year = element.selectFirst(".year, .film-yil, .date")?.text()?.filter { it.isDigit() }?.take(4)?.toIntOrNull()
-        val score = element.selectFirst(".imdb, .score, .rating, .puan")?.text()?.trim()
+        val year = element.selectFirst(".film-year-footer, .year, .film-yil, .date")?.text()?.filter { it.isDigit() }?.take(4)?.toIntOrNull()
+        val score = element.selectFirst("small[title*='IMDb'], .imdb, .score, .rating, .puan")?.text()?.trim()
 
         return newMovieSearchResponse(title, href, TvType.Movie) {
             this.posterUrl = poster
@@ -125,56 +134,85 @@ class JetFilmIzle : MainAPI() {
         }
     }
 
+    internal fun playerRequests(doc: Document): List<Map<String, String>> {
+        val filmId = doc.selectFirst("input[name=film_id]")?.attr("value")
+            ?.takeIf { it.toIntOrNull()?.let { id -> id > 0 } == true } ?: return emptyList()
+        return doc.select(".player-source-btn[data-source-index][data-player-type]").mapNotNull { button ->
+            val index = button.attr("data-source-index").toIntOrNull()?.takeIf { it >= 0 }
+                ?: return@mapNotNull null
+            val playerType = button.attr("data-player-type").takeIf { it in setOf("dublaj", "altyazi", "genel") }
+                ?: return@mapNotNull null
+            mapOf("film_id" to filmId, "source_index" to index.toString(), "player_type" to playerType)
+        }.distinct()
+    }
+
+    internal fun playbackFrames(doc: Document): List<String> = doc.select("iframe").mapNotNull { iframe ->
+        if (iframe.id().contains("trailer", ignoreCase = true) ||
+            iframe.parents().any { it.id().contains("trailer", ignoreCase = true) }) return@mapNotNull null
+        val src = iframe.attr("data-src").ifBlank { iframe.attr("src") }.trim()
+        if (src.isBlank() || src.contains("wp-embedded-content") ||
+            src.startsWith("about:") || src.startsWith("javascript:") || src.startsWith("data:")) return@mapNotNull null
+        val url = fixUrlNull(src) ?: return@mapNotNull null
+        val uri = try { URI(url) } catch (_: Exception) { return@mapNotNull null }
+        val host = uri.host?.lowercase() ?: return@mapNotNull null
+        if (uri.scheme !in setOf("https", "http") || host == "youtu.be" ||
+            host == "youtube.com" || host.endsWith(".youtube.com") ||
+            host == "youtube-nocookie.com" || host.endsWith(".youtube-nocookie.com")) return@mapNotNull null
+        url
+    }.distinct()
+
+    private suspend fun resolvePlayerDocument(
+        doc: Document,
+        referer: String,
+        subtitleCallback: (SubtitleFile) -> Unit,
+        callback: (ExtractorLink) -> Unit
+    ) {
+        doc.select("video source[src], video[src]").forEach { video ->
+            val src = fixUrlNull(video.attr("src")) ?: return@forEach
+            val preflight = StreamValidator.validateStream(src, mapOf("Referer" to referer), name)
+            if (preflight.isValid) {
+                val typeTag = if (preflight.streamType == ExtractorLinkType.M3U8) "HLS" else "MP4"
+                callback(newExtractorLink(source = name, name = "$name $typeTag", url = src, type = preflight.streamType) {
+                    this.referer = referer
+                    this.quality = Qualities.Unknown.value
+                })
+            }
+        }
+        playbackFrames(doc).forEach { iframe ->
+            loadExtractor(iframe, referer, subtitleCallback, callback)
+        }
+    }
+
     override suspend fun loadLinks(
         data: String,
         isCasting: Boolean,
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        var linksFound = false
         val doc = app.get(data).document
-
-        val iframes = mutableListOf<String>()
-        doc.select("iframe").forEach { iframe ->
-            val src = iframe.attr("data-src").ifEmpty { iframe.attr("src") }
-            if (src.isNotBlank() && !src.contains("wp-embedded-content")) {
-                fixUrlNull(src)?.let { iframes.add(it) }
-            }
-        }
-
-        doc.select("video source[src], video[src]").forEach { v ->
-            val src = fixUrlNull(v.attr("src")) ?: return@forEach
-            val preflight = StreamValidator.validateStream(src, mapOf("Referer" to mainUrl), name)
-            if (preflight.isValid) {
-                val typeTag = if (preflight.streamType == ExtractorLinkType.M3U8) "HLS" else "MP4"
-                callback(
-                    newExtractorLink(
-                        source = name,
-                        name = "$name $typeTag",
-                        url = src,
-                        type = preflight.streamType
-                    ) {
-                        this.referer = mainUrl
-                        this.quality = Qualities.Unknown.value
-                    }
-                )
-                linksFound = true
-            }
-        }
-
+        val origin = URI(data).let { "${it.scheme}://${it.authority}" }
+        // The null candidate handles pages with inline players; other candidates are the public source tabs.
+        val candidates: List<Map<String, String>?> = listOf(null) + playerRequests(doc)
         val resolved = BoundedParallelResolver.resolveProgressive(
-            candidates = iframes.distinct(),
+            candidates = candidates,
             maxConcurrency = 4,
-            resolver = { iframeUrl, emitLink ->
-                val fixed = fixUrl(iframeUrl)
-                loadExtractor(fixed, referer = mainUrl, subtitleCallback, emitLink)
+            provider = name,
+            resolver = { form, emitLink ->
+                val playerDoc = if (form == null) doc else app.post(
+                    "$origin/jetplayer",
+                    data = form,
+                    headers = mapOf(
+                        "Referer" to data,
+                        "Origin" to origin,
+                        "X-Requested-With" to "XMLHttpRequest",
+                        "User-Agent" to SafeHttpClient.DEFAULT_USER_AGENT
+                    ),
+                    timeout = 10
+                ).document
+                resolvePlayerDocument(playerDoc, data, subtitleCallback, emitLink)
             },
-            onLinkFound = { link ->
-                callback(link)
-                linksFound = true
-            }
+            onLinkFound = callback
         )
-
-        return linksFound || resolved > 0
+        return resolved > 0
     }
 }

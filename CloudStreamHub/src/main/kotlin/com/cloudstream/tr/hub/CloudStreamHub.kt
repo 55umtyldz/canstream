@@ -15,8 +15,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Collections
 
@@ -30,6 +33,7 @@ class CloudStreamHub : MainAPI() {
         TvType.Movie,
         TvType.TvSeries,
         TvType.Anime,
+        TvType.AnimeMovie,
         TvType.Cartoon,
         TvType.Documentary
     )
@@ -51,7 +55,11 @@ class CloudStreamHub : MainAPI() {
         "${mainUrl}/movie/popular?language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Filmler",
         "${mainUrl}/tv/popular?language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Diziler",
         "${mainUrl}/movie/top_rated?language=tr-TR&api_key=${tmdbApiKey}" to "En Çok Oy Alan Filmler",
-        "${mainUrl}/movie/now_playing?language=tr-TR&api_key=${tmdbApiKey}" to "Vizyondaki Filmler"
+        "${mainUrl}/movie/now_playing?language=tr-TR&api_key=${tmdbApiKey}" to "Vizyondaki Filmler",
+        "${mainUrl}/discover/movie?with_genres=99&language=tr-TR&api_key=${tmdbApiKey}" to "Belgesel Filmler",
+        "${mainUrl}/discover/tv?with_genres=99&language=tr-TR&api_key=${tmdbApiKey}" to "Belgesel Dizileri",
+        "${mainUrl}/discover/movie?with_genres=16&language=tr-TR&api_key=${tmdbApiKey}" to "Animasyon Filmleri",
+        "${mainUrl}/discover/tv?with_genres=16&language=tr-TR&api_key=${tmdbApiKey}" to "Anime ve Animasyon"
     )
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
@@ -101,13 +109,13 @@ class CloudStreamHub : MainAPI() {
         }
 
         return if (isMovie) {
-            newMovieSearchResponse(rawTitle, dataUrl, TvType.Movie) {
+            newMovieSearchResponse(rawTitle, dataUrl, HubContentRouting.type(true, item.genreIds.orEmpty())) {
                 this.posterUrl = poster
                 this.year = year
                 this.score = Score.from10(score)
             }
         } else {
-            newTvSeriesSearchResponse(rawTitle, dataUrl, TvType.TvSeries) {
+            newTvSeriesSearchResponse(rawTitle, dataUrl, HubContentRouting.type(false, item.genreIds.orEmpty())) {
                 this.posterUrl = poster
                 this.year = year
                 this.score = Score.from10(score)
@@ -145,10 +153,11 @@ class CloudStreamHub : MainAPI() {
                 isMovie = true,
                 tmdbId = id,
                 imdbId = resp.externalIds?.imdbId,
-                originalTitle = resp.originalTitle ?: resp.originalName
+                originalTitle = resp.originalTitle ?: resp.originalName,
+                category = HubContentRouting.category(resp.genres.orEmpty().mapNotNull { it.id })
             ).toUrlData()
 
-            return newMovieLoadResponse(title, url, TvType.Movie, payload) {
+            return newMovieLoadResponse(title, url, HubContentRouting.type(true, resp.genres.orEmpty().mapNotNull { it.id }), payload) {
                 this.posterUrl = poster
                 this.backgroundPosterUrl = backdrop
                 this.plot = resp.overview
@@ -174,7 +183,8 @@ class CloudStreamHub : MainAPI() {
                         episode = ep,
                         tmdbId = id,
                         imdbId = resp.externalIds?.imdbId,
-                        originalTitle = resp.originalTitle ?: resp.originalName
+                        originalTitle = resp.originalTitle ?: resp.originalName,
+                        category = HubContentRouting.category(resp.genres.orEmpty().mapNotNull { it.id })
                     ).toUrlData()
 
                     episodes.add(
@@ -187,7 +197,7 @@ class CloudStreamHub : MainAPI() {
                 }
             }
 
-            return newTvSeriesLoadResponse(title, url, TvType.TvSeries, episodes) {
+            return newTvSeriesLoadResponse(title, url, HubContentRouting.type(false, resp.genres.orEmpty().mapNotNull { it.id }), episodes) {
                 this.posterUrl = poster
                 this.backgroundPosterUrl = backdrop
                 this.plot = resp.overview
@@ -209,52 +219,11 @@ class CloudStreamHub : MainAPI() {
         val payload = AggregatorLinkPayload.fromUrlData(data) ?: return false
         val torrentSourcesEnabled = com.cloudstream.tr.core.resolvers.DebridConfig.enableTorrentSources
         val debridEnabled = com.cloudstream.tr.core.resolvers.DebridConfig.isDebridEnabled
-        val linksFound = java.util.concurrent.atomic.AtomicBoolean(false)
-        val linkCallbackLock = Any()
-        val collectedLinks = mutableListOf<ExtractorLink>()
-        val seenLinkUrls = mutableSetOf<String>()
-        val emittedSourcesBeforeFederationComplete = mutableSetOf<String>()
-        val deferredLinksBySource = linkedMapOf<String, java.util.ArrayDeque<ExtractorLink>>()
-        var federationComplete = false
+        val collector = HubLinkCollector(torrentSourcesEnabled, debridEnabled, callback)
+        val federationTorrents = Collections.synchronizedList(mutableListOf<ExtractorLink>())
         val interceptedCallback: (ExtractorLink) -> Unit = { link ->
-            synchronized(linkCallbackLock) {
-                val url = link.url.trim()
-                val isTorrentLink = link.type == ExtractorLinkType.MAGNET ||
-                    link.type == ExtractorLinkType.TORRENT ||
-                    url.startsWith("magnet:", ignoreCase = true)
-                val isTorrentio = link.source.equals("Torrentio", ignoreCase = true)
-                val isYts = link.source.equals("YTS", ignoreCase = true)
-                val sourceAllowed = when {
-                    isYts -> torrentSourcesEnabled
-                    isTorrentio -> torrentSourcesEnabled || (debridEnabled && !isTorrentLink)
-                    isTorrentLink -> torrentSourcesEnabled
-                    else -> true
-                }
-                if (sourceAllowed && url.isNotBlank() && seenLinkUrls.add(url)) {
-                    collectedLinks.add(link)
-                    linksFound.set(true)
-                    val sourceKey = link.source.trim().lowercase()
-                    if (federationComplete || sourceKey.isBlank() || emittedSourcesBeforeFederationComplete.add(sourceKey)) {
-                        callback(link)
-                    } else {
-                        deferredLinksBySource.getOrPut(sourceKey) { java.util.ArrayDeque() }.addLast(link)
-                    }
-                }
-            }
-        }
-
-        fun flushDeferredLinks() {
-            synchronized(linkCallbackLock) {
-                federationComplete = true
-                while (deferredLinksBySource.isNotEmpty()) {
-                    val iterator = deferredLinksBySource.entries.iterator()
-                    while (iterator.hasNext()) {
-                        val queue = iterator.next().value
-                        callback(queue.removeFirst())
-                        if (queue.isEmpty()) iterator.remove()
-                    }
-                }
-            }
+            if (HubTorrentSelector.isTorrent(link)) federationTorrents.add(link)
+            else collector.direct(link)
         }
 
         suspend fun fetchSubtitlesInBackground() {
@@ -281,6 +250,7 @@ class CloudStreamHub : MainAPI() {
         ) + (payload.tmdbId?.let { "_tmdb_$it" } ?: "")
 
         fun flushCollectedLinks() {
+            val collectedLinks = collector.snapshot()
             if (collectedLinks.isEmpty()) return
 
             val linksForCache = collectedLinks.toList().map { link ->
@@ -312,255 +282,242 @@ class CloudStreamHub : MainAPI() {
         val cachedLinks = com.cloudstream.tr.core.streaming.StreamCacheManager.get(cacheKey)
         if (!cachedLinks.isNullOrEmpty()) {
             for (link in cachedLinks) {
-                interceptedCallback(link)
+                collector.direct(link)
             }
         }
 
         // 1. Automated Turkish Subtitles via OpenSubtitles
         fetchSubtitlesInBackground()
 
-        // 2. High-speed Direct DDL CDN (4KHDHub Hub-Cloud, V-Cloud, FSL Server)
-        try {
-            val fourKLinks = com.cloudstream.tr.core.resolvers.FourKhubResolver.resolve(
-                title = payload.title,
-                year = payload.year,
-                isMovie = payload.isMovie,
-                season = payload.season,
-                episode = payload.episode
-            )
-            for (link in fourKLinks) {
-                interceptedCallback(link)
+        return coroutineScope {
+            // Direct HTTP resolution and federation must not block the torrent pair or each other.
+            val directJob = launch {
+                try {
+                    com.cloudstream.tr.core.resolvers.FourKhubResolver.resolve(
+                        title = payload.title, year = payload.year, isMovie = payload.isMovie,
+                        season = payload.season, episode = payload.episode
+                    ).forEach(interceptedCallback)
+                } catch (e: CancellationException) { throw e } catch (_: Exception) {}
             }
-        } catch (_: Exception) {}
-
-        // 3. Debrid & Torrent P2P (Torrentio & YTS) - checked against DebridConfig preferences
-        if (payload.imdbId != null && (com.cloudstream.tr.core.resolvers.DebridConfig.enableTorrentSources || com.cloudstream.tr.core.resolvers.DebridConfig.isDebridEnabled)) {
-            val torrentioLinks = com.cloudstream.tr.core.resolvers.TorrentioResolver.resolve(
-                imdbId = payload.imdbId,
-                isMovie = payload.isMovie,
-                season = payload.season,
-                episode = payload.episode
-            )
-            for (link in torrentioLinks) {
-                interceptedCallback(link)
+            val torrentJob = launch {
+                val fresh = if (payload.imdbId != null && (torrentSourcesEnabled || debridEnabled)) {
+                    listOf(
+                        async {
+                            com.cloudstream.tr.core.resolvers.TorrentioResolver.resolve(
+                                payload.imdbId, payload.isMovie, payload.season, payload.episode
+                            )
+                        },
+                        async {
+                            if (payload.isMovie && torrentSourcesEnabled)
+                                com.cloudstream.tr.core.resolvers.YtsResolver.resolve(payload.imdbId, true)
+                            else emptyList()
+                        }
+                    ).awaitAll().flatten()
+                } else emptyList()
+                fresh.filterNot(HubTorrentSelector::isTorrent).forEach(collector::direct)
+                val freshTorrents = fresh.filter(HubTorrentSelector::isTorrent)
+                // An origin with fresh torrents supersedes its cached torrent candidates.
+                val cachedFallback = HubTorrentSelector.cachedFallback(cachedLinks.orEmpty(), fresh, true)
+                collector.torrents(freshTorrents + cachedFallback)
             }
 
-            if (payload.isMovie && com.cloudstream.tr.core.resolvers.DebridConfig.enableTorrentSources) {
-                val ytsLinks = com.cloudstream.tr.core.resolvers.YtsResolver.resolve(
-                    imdbId = payload.imdbId,
-                    isMovie = true
-                )
-                for (link in ytsLinks) {
-                    interceptedCallback(link)
-                }
-            }
-        }
-
-        val discoveredProviders = CloudStreamProviderRegistryAdapter.getRegisteredProviders(excludeName = this.name)
-        val providers = if (payload.isMovie) {
-            discoveredProviders.filter { TvType.Movie in it.supportedTypes }
-        } else {
-            discoveredProviders
-        }
-        if (providers.isEmpty()) {
-            flushDeferredLinks()
-            DiagnosticLogger.log(
+            val discoveredProviders = CloudStreamProviderRegistryAdapter.getRegisteredProviders(excludeName = this@CloudStreamHub.name)
+            val providers = discoveredProviders.filter { HubContentRouting.eligible(it, payload) }
+            if (providers.isEmpty()) DiagnosticLogger.log(
                 provider = name,
                 stage = DiagnosticStage.LOAD,
                 category = DiagnosticCategory.SOURCE_DISCOVERY,
                 message = "No eligible providers available from the CloudStream registry or CloudStreamHub bundle."
             )
-            flushCollectedLinks()
-            return linksFound.get()
-        }
-
-        val resolved = BoundedParallelResolver.resolveProgressive(
-            candidates = providers,
-            maxConcurrency = 4,
-            provider = name,
-            resolver = { provider, emitLink ->
-                try {
-                    val targetTitles = listOfNotNull(payload.title, payload.originalTitle).distinct()
-                    val searchQueries = targetTitles
-                        .filter { it.isNotBlank() }
-                        .distinctBy { it.trim().lowercase() }
-                    val matched = HubMatchingEngine.findConfidentMatchFromSearches(
-                        searchQueries = searchQueries,
-                        targetTitles = targetTitles,
-                        targetYear = payload.year,
-                        isMovie = payload.isMovie,
-                        search = { query -> HubMatchingEngine.searchProvider(provider, query) }
-                    ) ?: run {
-                        DiagnosticLogger.log(
-                            provider = provider.name,
-                            stage = DiagnosticStage.SEARCH,
-                            category = DiagnosticCategory.SOURCE_DISCOVERY,
-                            message = "Federation result: no confident match for '${payload.title}' or '${payload.originalTitle}' (${payload.year ?: "N/A"}); queries=${searchQueries.size}; arbitrary first results rejected."
-                        )
-                        return@resolveProgressive
-                    }
-
-                    DiagnosticLogger.log(
-                        provider = provider.name,
-                        stage = DiagnosticStage.SEARCH,
-                        category = DiagnosticCategory.SOURCE_DISCOVERY,
-                        message = "Federation result: confident ${matched.type} match '${matched.name}'; loading provider result."
-                    )
-                    val loadRes = provider.load(matched.url) ?: run {
-                        DiagnosticLogger.log(
-                            provider = provider.name,
-                            stage = DiagnosticStage.LOAD,
-                            category = DiagnosticCategory.SOURCE_DISCOVERY,
-                            message = "Federation result: matched '${matched.name}', but provider.load returned no response."
-                        )
-                        return@resolveProgressive
-                    }
-                    val targetLinkData: String? = if (payload.isMovie) {
-                        (loadRes as? MovieLoadResponse)?.dataUrl?.takeIf { it.isNotBlank() } ?: matched.url
-                    } else {
-                        val epList = (loadRes as? TvSeriesLoadResponse)?.episodes ?: emptyList()
-                        val ep = epList.firstOrNull { it.season == payload.season && it.episode == payload.episode }
-                        if (ep == null) {
-                            DiagnosticLogger.log(
-                                provider = provider.name,
-                                stage = DiagnosticStage.EPISODE_DISCOVERY,
-                                category = DiagnosticCategory.SOURCE_DISCOVERY,
-                                message = "Episode S${payload.season}E${payload.episode} not found in provider. Rejected fallback to prevent wrong season playback."
-                            )
-                        }
-                        ep?.data
-                    }
-
-                    if (targetLinkData != null) {
-                        val channel = Channel<ExtractorLink>(capacity = Channel.UNLIMITED)
-                        val seenUrls = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
-                        var rawLinksReceived = 0
-                        var duplicatesDropped = 0
-                        var channelOverflowDropped = 0
-                        var preflightValid = 0
-                        var preflightInvalid = 0
-                        var preflightIndeterminate = 0
-                        var linksEmitted = 0
-
-                        coroutineScope {
-                            val consumerJob = launch {
-                                for (rawLink in channel) {
-                                    val rawUrl = rawLink.url
-                                    if (rawUrl.isBlank() || rawUrl.contains("youtube.com") || rawUrl.contains("youtu.be")) {
-                                        continue
-                                    }
-                                    if (!seenUrls.add(rawUrl)) {
-                                        duplicatesDropped++
-                                        continue
-                                    }
-
-                                    if (
-                                        rawUrl.startsWith("magnet:") ||
-                                        rawLink.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.MAGNET ||
-                                        rawLink.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.TORRENT
-                                    ) {
-                                        emitLink(rawLink)
-                                        linksEmitted++
-                                        continue
-                                    }
-
-                                    val reqHeaders = rawLink.headers.toMutableMap()
-                                    if (rawLink.referer.isNotBlank() && !reqHeaders.containsKey("Referer") && !reqHeaders.containsKey("referer")) {
-                                        reqHeaders["Referer"] = rawLink.referer
-                                    }
-
-                                    val preflight = StreamValidator.validateStream(
-                                        url = rawUrl,
-                                        headers = reqHeaders,
-                                        provider = provider.name
-                                    )
-                                    when (preflight.status) {
-                                        com.cloudstream.tr.core.network.ValidationStatus.VALID -> preflightValid++
-                                        com.cloudstream.tr.core.network.ValidationStatus.INVALID -> preflightInvalid++
-                                        com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE -> preflightIndeterminate++
-                                    }
-
-                                    if (preflight.isValid || preflight.status == com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE) {
-                                        val formattedName = ProviderModels.formatSourceTitle(
-                                            sourceName = provider.name,
-                                            resolution = rawLink.name
-                                        )
-                                        val taggedLink = newExtractorLink(
-                                            source = provider.name,
-                                            name = formattedName,
-                                            url = rawLink.url,
-                                            type = preflight.streamType
-                                        ) {
-                                            this.referer = rawLink.referer
-                                            this.quality = rawLink.quality
-                                            this.headers = reqHeaders
-                                        }
-                                        emitLink(taggedLink)
-                                        linksEmitted++
-                                    }
-                                }
-                            }
-
-                            try {
-                                provider.loadLinks(
-                                    data = targetLinkData,
-                                    isCasting = isCasting,
-                                    subtitleCallback = subtitleCallback,
-                                    callback = { rawLink ->
-                                        rawLinksReceived++
-                                        val result = channel.trySend(rawLink)
-                                        if (!result.isSuccess) {
-                                            channelOverflowDropped++
-                                            DiagnosticLogger.log(
-                                                provider = provider.name,
-                                                stage = DiagnosticStage.STREAM_PREFLIGHT,
-                                                category = DiagnosticCategory.NETWORK,
-                                                message = "Channel buffer overflow for link: ${DiagnosticLogger.redactUrl(rawLink.url)}"
-                                            )
-                                        }
-                                    }
+            BoundedParallelResolver.resolveProgressive(
+                candidates = providers,
+                maxConcurrency = 4,
+                provider = name,
+                resolver = { provider, emitLink ->
+                    val completed = HubProviderTimeout.resolve {
+                        try {
+                            val targetTitles = listOfNotNull(payload.title, payload.originalTitle).distinct()
+                            val searchQueries = targetTitles
+                                .filter { it.isNotBlank() }
+                                .distinctBy { it.trim().lowercase() }
+                            val matched = HubMatchingEngine.findConfidentMatchFromSearches(
+                                searchQueries = searchQueries,
+                                targetTitles = targetTitles,
+                                targetYear = payload.year,
+                                isMovie = payload.isMovie,
+                                search = { query -> HubMatchingEngine.searchProvider(provider, query) }
+                            ) ?: run {
+                                DiagnosticLogger.log(
+                                    provider = provider.name,
+                                    stage = DiagnosticStage.SEARCH,
+                                    category = DiagnosticCategory.SOURCE_DISCOVERY,
+                                    message = "Federation result: no confident match for '${payload.title}' or '${payload.originalTitle}' (${payload.year ?: "N/A"}); queries=${searchQueries.size}; arbitrary first results rejected."
                                 )
-                            } finally {
-                                channel.close()
+                                return@resolve
                             }
-
-                            consumerJob.join()
 
                             DiagnosticLogger.log(
                                 provider = provider.name,
-                                stage = DiagnosticStage.STREAM_PREFLIGHT,
-                                category = if (linksEmitted > 0) DiagnosticCategory.SOURCE_DISCOVERY else DiagnosticCategory.NETWORK,
-                                message = "Federation result: matched='${matched.name}', raw=$rawLinksReceived, providerEmitted=$linksEmitted (before hub dedupe and source-policy filtering), valid=$preflightValid, indeterminate=$preflightIndeterminate, invalid=$preflightInvalid, duplicates=$duplicatesDropped, dropped=$channelOverflowDropped. Preflight does not confirm sustained playback."
+                                stage = DiagnosticStage.SEARCH,
+                                category = DiagnosticCategory.SOURCE_DISCOVERY,
+                                message = "Federation result: confident ${matched.type} match '${matched.name}'; loading provider result."
+                            )
+                            val loadRes = provider.load(matched.url) ?: run {
+                                DiagnosticLogger.log(
+                                    provider = provider.name,
+                                    stage = DiagnosticStage.LOAD,
+                                    category = DiagnosticCategory.SOURCE_DISCOVERY,
+                                    message = "Federation result: matched '${matched.name}', but provider.load returned no response."
+                                )
+                                return@resolve
+                            }
+                            val targetLinkData = HubContentRouting.linkData(loadRes, payload)
+
+                            if (targetLinkData != null) {
+                                val channel = Channel<ExtractorLink>(capacity = Channel.UNLIMITED)
+                                val seenUrls = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+                                var rawLinksReceived = 0
+                                var duplicatesDropped = 0
+                                var channelOverflowDropped = 0
+                                var preflightValid = 0
+                                var preflightInvalid = 0
+                                var preflightIndeterminate = 0
+                                var linksEmitted = 0
+
+                                coroutineScope {
+                                    val consumerJob = launch {
+                                        for (rawLink in channel) {
+                                            currentCoroutineContext().ensureActive()
+                                            val rawUrl = rawLink.url
+                                            if (rawUrl.isBlank() || rawUrl.contains("youtube.com") || rawUrl.contains("youtu.be")) {
+                                                continue
+                                            }
+                                            if (!seenUrls.add(rawUrl)) {
+                                                duplicatesDropped++
+                                                continue
+                                            }
+
+                                            if (
+                                                rawUrl.startsWith("magnet:") ||
+                                                rawLink.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.MAGNET ||
+                                                rawLink.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.TORRENT
+                                            ) {
+                                                emitLink(rawLink)
+                                                linksEmitted++
+                                                continue
+                                            }
+
+                                            val reqHeaders = rawLink.headers.toMutableMap()
+                                            if (rawLink.referer.isNotBlank() && !reqHeaders.containsKey("Referer") && !reqHeaders.containsKey("referer")) {
+                                                reqHeaders["Referer"] = rawLink.referer
+                                            }
+
+                                            val preflight = StreamValidator.validateStream(
+                                                url = rawUrl,
+                                                headers = reqHeaders,
+                                                provider = provider.name
+                                            )
+                                            when (preflight.status) {
+                                                com.cloudstream.tr.core.network.ValidationStatus.VALID -> preflightValid++
+                                                com.cloudstream.tr.core.network.ValidationStatus.INVALID -> preflightInvalid++
+                                                com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE -> preflightIndeterminate++
+                                            }
+
+                                            if (preflight.isValid || preflight.status == com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE) {
+                                                val formattedName = ProviderModels.formatSourceTitle(
+                                                    sourceName = provider.name,
+                                                    resolution = rawLink.name
+                                                )
+                                                val taggedLink = ExtractorLink(
+                                                    source = provider.name,
+                                                    name = formattedName,
+                                                    url = rawLink.url,
+                                                    referer = rawLink.referer,
+                                                    quality = rawLink.quality,
+                                                    type = preflight.streamType,
+                                                    headers = reqHeaders,
+                                                    extractorData = rawLink.extractorData
+                                                )
+                                                currentCoroutineContext().ensureActive()
+                                                emitLink(taggedLink)
+                                                linksEmitted++
+                                            }
+                                        }
+                                    }
+
+                                    try {
+                                        provider.loadLinks(
+                                            data = targetLinkData,
+                                            isCasting = isCasting,
+                                            subtitleCallback = subtitleCallback,
+                                            callback = { rawLink ->
+                                                rawLinksReceived++
+                                                val result = channel.trySend(rawLink)
+                                                if (!result.isSuccess) {
+                                                    channelOverflowDropped++
+                                                    DiagnosticLogger.log(
+                                                        provider = provider.name,
+                                                        stage = DiagnosticStage.STREAM_PREFLIGHT,
+                                                        category = DiagnosticCategory.NETWORK,
+                                                        message = "Channel buffer overflow for link: ${DiagnosticLogger.redactUrl(rawLink.url)}"
+                                                    )
+                                                }
+                                            }
+                                        )
+                                    } finally {
+                                        // Avoid the default-argument bridge absent in the host coroutine runtime.
+                                        channel.close(null)
+                                    }
+
+                                    consumerJob.join()
+
+                                    DiagnosticLogger.log(
+                                        provider = provider.name,
+                                        stage = DiagnosticStage.STREAM_PREFLIGHT,
+                                        category = if (linksEmitted > 0) DiagnosticCategory.SOURCE_DISCOVERY else DiagnosticCategory.NETWORK,
+                                        message = "Federation result: matched='${matched.name}', raw=$rawLinksReceived, providerEmitted=$linksEmitted (before hub dedupe and source-policy filtering), valid=$preflightValid, indeterminate=$preflightIndeterminate, invalid=$preflightInvalid, duplicates=$duplicatesDropped, dropped=$channelOverflowDropped. Preflight does not confirm sustained playback."
+                                    )
+                                }
+                            } else {
+                                DiagnosticLogger.log(
+                                    provider = provider.name,
+                                    stage = if (payload.isMovie) DiagnosticStage.LOAD else DiagnosticStage.EPISODE_DISCOVERY,
+                                    category = DiagnosticCategory.SOURCE_DISCOVERY,
+                                    message = "Federation result: matched '${matched.name}', but no movie or requested episode link data was available."
+                                )
+                            }
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            DiagnosticLogger.log(
+                                provider = provider.name,
+                                stage = DiagnosticStage.LOAD,
+                                category = DiagnosticCategory.EXTRACTOR,
+                                message = "Provider resolution failed during aggregation: ${e.message}",
+                                throwable = e
                             )
                         }
-                    } else {
-                        DiagnosticLogger.log(
-                            provider = provider.name,
-                            stage = if (payload.isMovie) DiagnosticStage.LOAD else DiagnosticStage.EPISODE_DISCOVERY,
-                            category = DiagnosticCategory.SOURCE_DISCOVERY,
-                            message = "Federation result: matched '${matched.name}', but no movie or requested episode link data was available."
-                        )
                     }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    DiagnosticLogger.log(
+                    if (!completed) DiagnosticLogger.log(
                         provider = provider.name,
                         stage = DiagnosticStage.LOAD,
-                        category = DiagnosticCategory.EXTRACTOR,
-                        message = "Provider resolution failed during aggregation: ${e.message}",
-                        throwable = e
+                        category = DiagnosticCategory.NETWORK,
+                        message = "Federation result: provider timed out after 30 seconds; previously emitted links retained."
                     )
+                },
+                onLinkFound = { link ->
+                    interceptedCallback(link)
                 }
-            },
-            onLinkFound = { link ->
-                interceptedCallback(link)
-            }
-        )
+            )
 
-        flushDeferredLinks()
-        flushCollectedLinks()
-
-        return linksFound.get() || resolved > 0
+            torrentJob.join()
+            directJob.join()
+            val freshFederation = federationTorrents.toList()
+            collector.torrents(freshFederation + HubTorrentSelector.cachedFallback(
+                cachedLinks.orEmpty(), collector.snapshot() + freshFederation, false
+            ))
+            flushCollectedLinks()
+            collector.snapshot().isNotEmpty()
+        }
     }
 }

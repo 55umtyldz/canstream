@@ -11,14 +11,21 @@ import android.widget.TextView
 import android.widget.Toast
 import com.cloudstream.tr.core.diagnostics.DiagnosticLogger
 import com.cloudstream.tr.core.resolvers.DebridConfig
-import com.lagradost.cloudstream3.plugins.BasePlugin
+import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 
 @CloudstreamPlugin
-class CloudStreamHubPlugin : BasePlugin() {
+class CloudStreamHubPlugin : Plugin() {
+    override fun load(context: Context) {
+        super.load(context)
+        registerVideoClickAction(HubTorrentVlcAction())
+        registerVideoClickAction(HubTorrentMxAction())
+    }
+
     override fun load() {
         HubFederationLogcatBridge.install()
         registerMainAPI(CloudStreamHub())
+        registerExtractorAPI(com.cloudstream.tr.animecix.TauVideo())
     }
 
     fun openSettings(context: Context) {

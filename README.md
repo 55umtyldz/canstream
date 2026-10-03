@@ -30,7 +30,9 @@ https://raw.githubusercontent.com/Emre-Kahveci/CloudStreamHub/builds/repo.json
 
 ---
 
-## 📦 Mevcut Eklentiler (Active Providers — 30 Eklenti)
+## 📦 Sağlayıcı Modülleri
+
+Etkin eklentilerin güncel listesi [config/providers.json](config/providers.json) dosyasındadır. Aşağıdaki modül tablosu devre dışı sağlayıcıları da içerir; listede bulunmak doğrulanmış oynatma anlamına gelmez. CloudStreamHub'ın kalite ve kaynak seçimi [bağlantı çözümleme dokümanında](docs/LINK_RESOLUTION.md) açıklanmıştır.
 
 | Eklenti Adı | Modül Adı | Türler | Canonical Domain | Açıklama |
 |---|---|---|---|---|
@@ -39,7 +41,7 @@ https://raw.githubusercontent.com/Emre-Kahveci/CloudStreamHub/builds/repo.json
 | **FullHDFilmizlesene** | `FullHDFilmizlesene` | Film | [fullhdfilmizlesene.now](https://www.fullhdfilmizlesene.now) | RapidVid & Turbovid yerli/yabancı film arşivi |
 | **Film Modu** | `FilmModu` | Film | [filmmodu15.com](https://www.filmmodu15.com) | Yüksek kaliteli 1080p yerli ve yabancı film arşivi |
 | **Film Makinesi** | `FilmMakinesi` | Film, Dizi | [filmmakinesi.to](https://filmmakinesi.to) | CloseLoad & Vidmoly entegrasyonlu geniş film arşivi |
-| **JetFilmİzle** | `JetFilmIzle` | Film | [jetfilmizle.vip](https://jetfilmizle.vip) | Güncel sinema ve film arşivi |
+| **JetFilmİzle** | `JetFilmIzle` | Film | [jetfilmizle.now](https://jetfilmizle.now) | Güncel sinema ve film arşivi |
 | **SinemaCX** | `SinemaCX` | Film | [sinemacc.com](https://sinemacc.com) | FilmizleIn & Vidmoly alternatifli film arşivi |
 | **Kült Filmler** | `KultFilmler` | Film, Dizi | [kultfilmler.net](https://kultfilmler.net) | Klasik ve kült filmler arşivi |
 | **Yeşilçam TV** | `YesilCamTv` | Film | [yesilcamtv.com.tr](https://yesilcamtv.com.tr) | Nostaljik Yeşilçam klasik Türk sineması |
@@ -51,7 +53,7 @@ https://raw.githubusercontent.com/Emre-Kahveci/CloudStreamHub/builds/repo.json
 | **DiziPal** | `DiziPal` | Dizi, Film | [dizipal1430.com](https://dizipal1430.com) | Popüler dijital platform dizileri ve filmleri |
 | **Sinewix** | `Sinewix` | Film, Dizi | [sinewix.net](https://sinewix.net) | Geniş film ve dizi arşivi, dublaj & altyazı seçenekleri |
 | **ÇizgiMax** | `CizgiMax` | Çizgi Dizi, Anime, Çizgi Film | [cizgimax.online](https://cizgimax.online) | Nostaljik ve güncel çizgi dizi & animasyon arşivi |
-| **Türk Anime TV** | `TurkAnime` | Anime, Anime Film | [turkanime.tv](https://www.turkanime.tv) | Türkiye'nin en büyük anime platformu |
+| **Türk Anime TV** | `TurkAnime` | Anime, Anime Film | — | Devre dışı: kaynak site kalıcı olarak kapandı ve alan adlarını satışa çıkardı |
 | **AnimeciX** | `AnimeciX` | Anime | [animecix.tv](https://animecix.tv) | Modern anime arşivi ve hızlı API entegrasyonu |
 | **BelgeselX** | `BelgeselX` | Belgesel | [belgeselx.com](https://belgeselx.com) | Türkçe dublajlı doğa, tarih, bilim belgeselleri |
 | **DiziKorea** | `DiziKorea` | Asya Dizisi, Kore Dizisi | [dizikorea3.com](https://dizikorea3.com) | Güncel Asya ve Kore dizileri, hızlı oynatıcılar |

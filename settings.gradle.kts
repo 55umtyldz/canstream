@@ -21,7 +21,8 @@ val disabled = listOf(
     "DiziPal",
     "FilmHane",
     "FilmModu",
-    "Sinewix"
+    "Sinewix",
+    "TurkAnime"
 )
 
 File(rootDir, ".").eachDir { dir ->

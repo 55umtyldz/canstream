@@ -35,7 +35,22 @@ object TorrentTrackers {
         "udp://opentracker.i2p.rocks:6969/announce"
     )
 
-    val asMagnetParam: String by lazy {
-        list.joinToString("") { "&tr=" + URLEncoder.encode(it, "UTF-8") }
+    internal fun isValidHash(hash: String): Boolean =
+        Regex("[a-fA-F0-9]{40}|[a-zA-Z2-7]{32}").matches(hash)
+
+    fun magnetParams(sources: List<String> = emptyList()): String {
+        val trackers = (sources.map { it.removePrefix("tracker:").trim() } + list)
+            .filter { tracker ->
+                try {
+                    val uri = java.net.URI(tracker)
+                    uri.scheme?.lowercase() in setOf("udp", "http", "https", "ws", "wss") &&
+                        !uri.host.isNullOrBlank() && uri.rawUserInfo == null && uri.rawFragment == null
+                } catch (_: Exception) {
+                    false
+                }
+            }.distinct()
+        return trackers.joinToString("") { "&tr=" + URLEncoder.encode(it, "UTF-8") }
     }
+
+    val asMagnetParam: String by lazy { magnetParams() }
 }

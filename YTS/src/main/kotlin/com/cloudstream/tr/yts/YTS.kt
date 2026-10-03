@@ -19,7 +19,7 @@ data class YtsDetailData(
 )
 
 class YTS : MainAPI() {
-    override var mainUrl = "https://en.yts.lu"
+    override var mainUrl = "https://yts.gg"
     override var name = "YTS"
     override val hasMainPage = true
     override var lang = "en"

@@ -7,7 +7,7 @@ import com.lagradost.cloudstream3.MainAPI
 
 object CloudStreamProviderRegistryAdapter {
 
-    private val knownProviderClasses = listOf(
+    internal val knownProviderClasses = listOf(
         "com.cloudstream.tr.hdfilmcehennemi.HDFilmCehennemi",
         "com.cloudstream.tr.filmmakinesi.FilmMakinesi",
         "com.cloudstream.tr.kultfilmler.KultFilmler",
@@ -19,7 +19,15 @@ object CloudStreamProviderRegistryAdapter {
         "com.cloudstream.tr.dizikorea.DiziKorea",
         "com.cloudstream.tr.dizilla.Dizilla",
         "com.cloudstream.tr.jetfilmizle.JetFilmIzle",
-        "com.cloudstream.tr.fullhdfilmizlesene.FullHDFilmizlesene"
+        "com.cloudstream.tr.fullhdfilmizlesene.FullHDFilmizlesene",
+        "com.cloudstream.tr.animecix.AnimeciX",
+        "com.cloudstream.tr.animeler.Animeler",
+        "com.cloudstream.tr.belgeselx.BelgeselX",
+        "com.cloudstream.tr.dramadizilerim.DramaDizilerim",
+        "com.cloudstream.tr.webdramaturkey.WebDramaTurkey",
+        "com.cloudstream.tr.setfilmizle.SetFilmIzle",
+        "com.cloudstream.tr.dizigecesi.Dizigecesi",
+        "com.cloudstream.tr.rarefilmm.RareFilmm"
     )
 
     /**
@@ -96,7 +104,7 @@ object CloudStreamProviderRegistryAdapter {
             } catch (_: Throwable) {}
         }
 
-        val filtered = discovered.distinctBy { it.name }.filter { it.name != excludeName }
+        val filtered = discovered.distinctBy { it.name }.filter { it.name != excludeName && it.name !in setOf("CloudStreamHub", "YTS", "4KHDHub") }
         if (filtered.isEmpty()) {
             DiagnosticLogger.log(
                 provider = "CloudStreamHub",

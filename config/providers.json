@@ -68,7 +68,7 @@
       "healthTier": "full",
       "smokeTest": {
         "searchQuery": "dunya",
-        "knownDetail": "https://belgeselx.com/belgesel/gezegenimiz",
+        "knownDetail": "https://belgeselx.com/belgesel/cosmos-bir-uzay-seruveni",
         "expectedType": "Documentary"
       },
       "monitoring": {
@@ -346,7 +346,7 @@
     {
       "name": "TurkAnime",
       "module": "TurkAnime",
-      "enabled": true,
+      "enabled": false,
       "language": "tr",
       "types": [
         "Anime",
@@ -402,7 +402,7 @@
           ]
         }
       },
-      "disabledReason": "DISABLED_DEAD: Site officially shut down with farewell announcement; domains offered for sale."
+      "disabledReason": "DEAD_WITH_EVIDENCE: Official permanent closure announcement (2010-2026); catalog unavailable and domains offered for sale."
     },
     {
       "name": "YesilCamTv",
@@ -823,7 +823,7 @@
       "healthTier": "full",
       "smokeTest": {
         "searchQuery": "batman",
-        "knownDetail": "https://jetfilmizle.vip/film/the-batman-izle.html",
+        "knownDetail": "https://jetfilmizle.now/film/batman-ninja-vs-yakuza-league",
         "expectedType": "Movie"
       },
       "monitoring": {
@@ -836,8 +836,8 @@
         },
         "search": {
           "method": "GET",
-          "path": "/?s={query}",
-          "expectedSelector": "article.movie, article.post, div.movie-item"
+          "path": "/arama?q={query}",
+          "expectedSelector": "div.film-card"
         },
         "homepage": {
           "selectors": [
@@ -1008,7 +1008,7 @@
       "healthTier": "full",
       "smokeTest": {
         "searchQuery": "inception",
-        "knownDetail": "https://api.themoviedb.org/3/movie/27205",
+        "knownDetail": "https://api.themoviedb.org/3/movie/27205?api_key=90ad3ec891e5923150283b99719d890f",
         "expectedType": "Movie"
       },
       "monitoring": {
@@ -1021,7 +1021,7 @@
         },
         "search": {
           "method": "GET",
-          "path": "/search/multi?query={query}&language=tr-TR&api_key=b0f2a969335a4d434220b33215284eb1",
+          "path": "/3/search/multi?query={query}&language=tr-TR&api_key=90ad3ec891e5923150283b99719d890f",
           "jsonKey": "results"
         },
         "homepage": {
@@ -1109,7 +1109,7 @@
         },
         "search": {
           "method": "GET",
-          "path": "/arama?q={query}",
+          "path": "/search?q={query}",
           "headers": {
             "Referer": "https://dramadizilerim.com/"
           }
@@ -1260,7 +1260,8 @@
         },
         "search": {
           "method": "GET",
-          "path": "/arama?q={query}",
+          "path": "/?s={query}",
+          "expectedSelector": "a[href*='/film/'], a[href*='/dizi/']",
           "headers": {
             "Referer": "https://www.setfilmizle.ltd/"
           }
@@ -1359,7 +1360,7 @@
         },
         "search": {
           "method": "GET",
-          "path": "/arama?q={query}",
+          "path": "/?s={query}",
           "headers": {
             "Referer": "https://hdfilmdelisi.one/"
           }
@@ -1457,7 +1458,7 @@
         },
         "search": {
           "method": "GET",
-          "path": "/arama?q={query}",
+          "path": "/?s={query}",
           "headers": {
             "Referer": "https://rarefilmm.com/"
           }

@@ -476,7 +476,7 @@
       "status": "dead"
     },
     "YTS": {
-      "canonical": "https://yts.mx",
+      "canonical": "https://yts.gg",
       "allowedHosts": [
         "yts.gg",
         "web.yts.gg",

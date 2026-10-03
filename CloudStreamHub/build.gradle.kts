@@ -1,11 +1,16 @@
-version = 25
+version = 29
+
+dependencies {
+    // Official host SDK: compile-only; host player/action classes stay in CloudStream.
+    add("cloudstream", "com.lagradost.cloudstream3:cloudstream:pre-release")
+}
 
 cloudstream {
     authors     = listOf("CloudStreamTR", "Emre-Kahveci")
     language    = "tr"
     description = "CloudStreamHub Aggregator - TMDB Keşif & CloudStream Sağlayıcılarını Birleştiren Eklenti"
     status      = 1
-    tvTypes     = listOf("Movie", "TvSeries", "Anime", "Cartoon", "Documentary")
+    tvTypes     = listOf("Movie", "TvSeries", "Anime", "AnimeMovie", "Cartoon", "Documentary")
     iconUrl     = "https://raw.githubusercontent.com/Emre-Kahveci/CloudStreamHub/main/assets/icon.png"
 }
 
@@ -23,7 +28,15 @@ val bundledProviderModules = listOf(
     "JetFilmIzle",
     "DiziKorea",
     "YesilCamTv",
-    "FullHDFilmizlesene"
+    "FullHDFilmizlesene",
+    "AnimeciX",
+    "Animeler",
+    "BelgeselX",
+    "DramaDizilerim",
+    "WebDramaTurkey",
+    "SetFilmIzle",
+    "Dizigecesi",
+    "RareFilmm"
 )
 
 val copyBundledProviderSources = tasks.register<Copy>("copyBundledProviderSources") {
@@ -42,9 +55,17 @@ tasks.matching { it.name.startsWith("compile") && it.name.endsWith("Kotlin") }.c
 }
 
 android {
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
     sourceSets {
         getByName("main") {
             java.srcDir(copyBundledProviderSources.map { it.destinationDir })
         }
     }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile>().configureEach {
+    compilerOptions.jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11)
 }

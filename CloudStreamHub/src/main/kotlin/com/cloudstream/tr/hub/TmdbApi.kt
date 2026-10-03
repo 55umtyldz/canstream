@@ -93,7 +93,8 @@ data class AggregatorLinkPayload(
     val episode: Int? = null,
     val tmdbId: Int? = null,
     val imdbId: String? = null,
-    val originalTitle: String? = null
+    val originalTitle: String? = null,
+    val category: String? = null
 ) {
     fun toUrlData(): String {
         val encTitle = URLEncoder.encode(title, "UTF-8")
@@ -103,7 +104,7 @@ data class AggregatorLinkPayload(
         val tId = tmdbId?.toString() ?: ""
         val iId = imdbId ?: ""
         val oTitle = originalTitle?.let { URLEncoder.encode(it, "UTF-8") } ?: ""
-        return "hub://item?title=$encTitle&year=$y&isMovie=$isMovie&season=$s&episode=$ep&tmdbId=$tId&imdbId=$iId&originalTitle=$oTitle"
+        return "hub://item?title=$encTitle&year=$y&isMovie=$isMovie&season=$s&episode=$ep&tmdbId=$tId&imdbId=$iId&originalTitle=$oTitle" + (category?.let { "&category=$it" } ?: "")
     }
 
     companion object {
@@ -123,7 +124,8 @@ data class AggregatorLinkPayload(
                     episode = params["episode"]?.toIntOrNull(),
                     tmdbId = params["tmdbId"]?.toIntOrNull(),
                     imdbId = params["imdbId"]?.takeIf { it.isNotBlank() },
-                    originalTitle = params["originalTitle"]?.takeIf { it.isNotBlank() }
+                    originalTitle = params["originalTitle"]?.takeIf { it.isNotBlank() },
+                    category = params["category"]?.takeIf { it in setOf("documentary", "animation", "general") }
                 )
             } catch (e: Exception) {
                 null

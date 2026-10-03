@@ -137,15 +137,19 @@ object HubMatchingEngine {
             }
 
             // 3. Media type validation (prevent cross-matching movie with tv series)
-            if (isMovie != null) {
-                val candidateIsMovie = when (item) {
-                    is MovieSearchResponse -> true
-                    is TvSeriesSearchResponse -> false
+            if (isMovie != null && item.type != TvType.Documentary) {
+                val candidateIsMovie = when {
+                    item.type == TvType.AnimeMovie -> true
+                    item is MovieSearchResponse -> true
+                    item is AnimeSearchResponse -> false
+                    item is TvSeriesSearchResponse -> false
                     else -> item.type == TvType.Movie
                 }
-                val candidateIsSeries = when (item) {
-                    is TvSeriesSearchResponse -> true
-                    is MovieSearchResponse -> false
+                val candidateIsSeries = when {
+                    item.type == TvType.AnimeMovie -> false
+                    item is TvSeriesSearchResponse -> true
+                    item is AnimeSearchResponse -> true
+                    item is MovieSearchResponse -> false
                     else -> item.type == TvType.TvSeries
                 }
                 if (isMovie && candidateIsSeries) {

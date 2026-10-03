@@ -4,10 +4,13 @@ import com.cloudstream.tr.core.diagnostics.DiagnosticCategory
 import com.cloudstream.tr.core.diagnostics.DiagnosticLogger
 import com.cloudstream.tr.core.diagnostics.DiagnosticStage
 import com.fasterxml.jackson.annotation.JsonProperty
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
+import kotlinx.coroutines.CancellationException
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
-import com.lagradost.cloudstream3.utils.Qualities
 import java.net.URLEncoder
 
 data class YtsResponse(
@@ -47,6 +50,7 @@ data class YtsTorrent(
 
 object YtsResolver {
     private val mirrors = listOf(
+        "https://yts.gg",
         "https://en.yts.lu",
         "https://yts.bz",
         "https://yts.lt",
@@ -56,61 +60,71 @@ object YtsResolver {
     )
 
     suspend fun resolve(imdbId: String, isMovie: Boolean): List<ExtractorLink> {
-        if (!isMovie || imdbId.isBlank()) return emptyList()
+        if (!isMovie || !Regex("tt[0-9]+").matches(imdbId)) return emptyList()
 
         for (mirror in mirrors) {
             try {
                 val targetUrl = "$mirror/api/v2/list_movies.json?query_term=$imdbId"
-                val response = app.get(targetUrl, timeout = 4).parsedSafe<YtsResponse>()
-                val movies = response?.data?.movies
-                if (movies.isNullOrEmpty()) continue
-
-                val movie = movies.firstOrNull() ?: continue
-                val torrents = movie.torrents ?: continue
-                val movieTitle = movie.title ?: "Movie"
-
-                val links = torrents.mapNotNull { t ->
-                    val hash = t.hash?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-                    val encodedTitle = URLEncoder.encode(movieTitle, "UTF-8")
-                    val magnet = "magnet:?xt=urn:btih:$hash&dn=$encodedTitle&index=0${TorrentTrackers.asMagnetParam}"
-
-                    val qStr = t.quality ?: "Unknown"
-                    val codecStr = t.videoCodec?.let { " $it" } ?: ""
-                    val sizeStr = t.size?.let { " [$it]" } ?: ""
-                    val seedCount = t.seeds ?: 0
-
-                    val hasDebrid = DebridConfig.isDebridEnabled
-                    if (!hasDebrid && seedCount < 3) return@mapNotNull null
-
-                    val seedStr = " ($seedCount seeds)"
-                    val displayName = "YTS $qStr$codecStr$sizeStr$seedStr".trim()
-
-                    val mappedQuality = when (qStr.lowercase()) {
-                        "2160p", "4k" -> Qualities.P2160.value
-                        "1080p" -> Qualities.P1080.value
-                        "720p" -> Qualities.P720.value
-                        else -> Qualities.Unknown.value
-                    }
-
-                    com.lagradost.cloudstream3.utils.newExtractorLink(
-                        source = "YTS",
-                        name = displayName,
-                        url = magnet,
-                        type = ExtractorLinkType.MAGNET
-                    ) {
-                        this.quality = mappedQuality
-                    }
-                }
+                val response = parseResponse(app.get(targetUrl, timeout = 4).text)
+                val links = mapResponse(response, imdbId, DebridConfig.isDebridEnabled)
                 if (links.isNotEmpty()) return links
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 DiagnosticLogger.log(
-                    provider = "YTS",
-                    stage = DiagnosticStage.LOAD,
+                    provider = "YTS", stage = DiagnosticStage.LOAD,
                     category = DiagnosticCategory.NETWORK,
-                    message = "Failed to query YTS mirror $mirror for $imdbId: ${e.message}"
+                    message = "YTS API request failed (${e.javaClass.simpleName})", url = mirror
                 )
             }
         }
         return emptyList()
+    }
+
+    internal fun parseResponse(body: String): YtsResponse? {
+        if (!body.trimStart().startsWith("{")) return null
+        return try {
+            jacksonObjectMapper().configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+                .readValue<YtsResponse>(body)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    internal suspend fun mapResponse(response: YtsResponse?, imdbId: String, hasDebrid: Boolean): List<ExtractorLink> {
+        if (response?.status != "ok") return emptyList()
+        val movies = response?.data?.movies
+        if (movies.isNullOrEmpty()) return emptyList()
+
+        val movie = movies.firstOrNull { it.imdbCode == imdbId } ?: return emptyList()
+        val torrents = movie.torrents ?: return emptyList()
+        val movieTitle = movie.title ?: "Movie"
+
+        return torrents.mapNotNull { t ->
+            val hash = t.hash?.takeIf { TorrentTrackers.isValidHash(it) } ?: return@mapNotNull null
+            val encodedTitle = URLEncoder.encode(movieTitle, "UTF-8")
+            val magnet = "magnet:?xt=urn:btih:$hash&dn=$encodedTitle&index=0${TorrentTrackers.asMagnetParam}"
+
+            val qStr = t.quality ?: "Unknown"
+            val codecStr = t.videoCodec?.let { " $it" } ?: ""
+            val sizeStr = t.size?.let { " [$it]" } ?: ""
+            val seedCount = t.seeds ?: 0
+
+            if (!hasDebrid && seedCount < 3) return@mapNotNull null
+
+            val seedStr = " ($seedCount seeds)"
+            val displayName = "YTS $qStr$codecStr$sizeStr$seedStr".trim()
+
+            val mappedQuality = TorrentioResolver.qualityOf(qStr)
+
+            com.lagradost.cloudstream3.utils.newExtractorLink(
+                source = "YTS",
+                name = displayName,
+                url = magnet,
+                type = ExtractorLinkType.MAGNET
+            ) {
+                this.quality = mappedQuality
+            }
+        }
     }
 }
