@@ -7,6 +7,19 @@ import java.net.URLDecoder
 import java.util.Locale
 import kotlinx.coroutines.withTimeoutOrNull
 
+internal object HubCandidateBudget {
+    const val MAX_PER_PROVIDER = 128
+    fun allow(receivedCount: Int): Boolean = receivedCount in 1..MAX_PER_PROVIDER
+}
+
+/** Total federation time budget: prevents N provider groups each taking 30s. */
+internal object HubFederationBudget {
+    const val DEFAULT_MS = 45_000L
+
+    suspend fun run(budgetMs: Long = DEFAULT_MS, block: suspend () -> Unit): Boolean =
+        withTimeoutOrNull(budgetMs) { block(); true } ?: false
+}
+
 internal object HubProviderTimeout {
     suspend fun resolve(timeoutMillis: Long = 30_000L, block: suspend () -> Unit): Boolean {
         return withTimeoutOrNull(timeoutMillis) { block(); true } ?: false

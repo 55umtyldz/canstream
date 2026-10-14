@@ -22,6 +22,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import java.util.concurrent.ConcurrentHashMap
 import java.util.Collections
+import java.util.concurrent.atomic.AtomicInteger
 
 class CloudStreamHub : MainAPI() {
     override var mainUrl = "https://api.themoviedb.org/3"
@@ -306,6 +307,7 @@ class CloudStreamHub : MainAPI() {
                 val imdbId = payload.imdbId
                 if (imdbId != null && (torrentSourcesEnabled || debridEnabled)) {
                     val fresh = Collections.synchronizedList(mutableListOf<ExtractorLink>())
+                    val torrentDiscoveryStartedNs = System.nanoTime()
                     val resolvers = mutableListOf<suspend () -> List<ExtractorLink>>(
                         {
                             com.cloudstream.tr.core.resolvers.TorrentioResolver.resolve(
@@ -323,6 +325,11 @@ class CloudStreamHub : MainAPI() {
                     resolveHubSourcesProgressively(
                         resolvers = resolvers,
                         onBatch = { batch ->
+                            DiagnosticLogger.log(
+                                provider = name, stage = DiagnosticStage.LOAD,
+                                category = DiagnosticCategory.SOURCE_DISCOVERY,
+                                message = "Torrent source batch: ${batch.size} results in ${(System.nanoTime() - torrentDiscoveryStartedNs) / 1_000_000} ms"
+                            )
                             fresh.addAll(batch)
                             batch.filterNot(HubTorrentSelector::isTorrent).forEach(collector::direct)
                             collector.torrents(batch.filter(HubTorrentSelector::isTorrent))
@@ -349,6 +356,7 @@ class CloudStreamHub : MainAPI() {
                 category = DiagnosticCategory.SOURCE_DISCOVERY,
                 message = "No eligible providers available from the CloudStream registry or CloudStreamHub bundle."
             )
+            val federationFinished = HubFederationBudget.run {
             BoundedParallelResolver.resolveProgressive(
                 candidates = providers,
                 maxConcurrency = 4,
@@ -394,9 +402,10 @@ class CloudStreamHub : MainAPI() {
                             val targetLinkData = HubContentRouting.linkData(loadRes, payload)
 
                             if (targetLinkData != null) {
-                                val channel = Channel<ExtractorLink>(capacity = Channel.UNLIMITED)
+                                // Hard cap avoids uncontrolled extraction/preflight work on low-RAM TVs.
+                                val channel = Channel<ExtractorLink>(capacity = HubCandidateBudget.MAX_PER_PROVIDER)
                                 val seenUrls = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
-                                var rawLinksReceived = 0
+                                val rawLinksReceived = AtomicInteger(0)
                                 var duplicatesDropped = 0
                                 var channelOverflowDropped = 0
                                 var preflightValid = 0
@@ -471,16 +480,12 @@ class CloudStreamHub : MainAPI() {
                                             isCasting = isCasting,
                                             subtitleCallback = subtitleCallback,
                                             callback = { rawLink ->
-                                                rawLinksReceived++
-                                                val result = channel.trySend(rawLink)
-                                                if (!result.isSuccess) {
+                                                val received = rawLinksReceived.incrementAndGet()
+                                                if (HubCandidateBudget.allow(received)) {
+                                                    val result = channel.trySend(rawLink)
+                                                    if (!result.isSuccess) channelOverflowDropped++
+                                                } else {
                                                     channelOverflowDropped++
-                                                    DiagnosticLogger.log(
-                                                        provider = provider.name,
-                                                        stage = DiagnosticStage.STREAM_PREFLIGHT,
-                                                        category = DiagnosticCategory.NETWORK,
-                                                        message = "Channel buffer overflow for link: ${DiagnosticLogger.redactUrl(rawLink.url)}"
-                                                    )
                                                 }
                                             }
                                         )
@@ -530,6 +535,13 @@ class CloudStreamHub : MainAPI() {
                 }
             )
 
+            }
+            if (!federationFinished) DiagnosticLogger.log(
+                provider = name,
+                stage = DiagnosticStage.LOAD,
+                category = DiagnosticCategory.NETWORK,
+                message = "Federation time budget reached; already emitted streams retained."
+            )
             torrentJob.join()
             directJob.join()
             val freshFederation = federationTorrents.toList()

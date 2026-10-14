@@ -91,6 +91,35 @@ class HubLinkSelectionTest {
         assertEquals(listOf(cached[2]), HubTorrentSelector.cachedFallback(cached, fresh, false))
     }
 
+    @Test fun candidateCapKeepsProviderMemoryBounded() {
+        assertTrue(HubCandidateBudget.allow(1))
+        assertTrue(HubCandidateBudget.allow(HubCandidateBudget.MAX_PER_PROVIDER))
+        assertFalse(HubCandidateBudget.allow(HubCandidateBudget.MAX_PER_PROVIDER + 1))
+        assertFalse(HubCandidateBudget.allow(0))
+    }
+
+    @Test fun globalFederationBudgetKeepsAlreadyEmittedResults() = kotlinx.coroutines.test.runTest {
+        val published = mutableListOf<String>()
+        val completed = HubFederationBudget.run(25) {
+            published.add("1080p")
+            delay(60_000)
+            published.add("late")
+        }
+        assertFalse(completed)
+        assertEquals(listOf("1080p"), published)
+        assertEquals(25L, testScheduler.currentTime)
+    }
+
+    @Test fun globalFederationBudgetPropagatesExplicitCancellation() = kotlinx.coroutines.test.runTest {
+        val cancellation = CancellationException("user exited")
+        try {
+            HubFederationBudget.run { throw cancellation }
+            fail("Cancellation swallowed")
+        } catch (e: CancellationException) {
+            assertEquals("user exited", e.message)
+        }
+    }
+
     @Test fun providerTimeoutStartsAfterPermitAndPreservesEmittedLinks() = kotlinx.coroutines.test.runTest {
         val emitted = mutableListOf<ExtractorLink>()
         val entered = mutableListOf<Int>()

@@ -14,8 +14,9 @@ A valid magnet, a Torrentio stream entry, successful HTTP 206 or passing unit te
 1. Check the server-reported file metadata before handing off to external players. Reject missing index, non-video selection and inconsistent file size. Recognize `.m2ts` for Blu-ray transport streams. Do **not** treat `.iso` as directly playable.
 2. Retain bounded head/tail byte probes and preserve cancellation. Transient server responses (408/425/429/5xx) retry; invalid/missing range protocol and file identity mismatches fail early.
 3. Keep different file indices of a multi-file torrent distinct during source selection (same info hash is not the same episode).
-4. Deliver Torrentio/YTS discoveries independently instead of awaiting both before emitting; failures of one source do not cancel valid other results.
-5. Prevent caching resolved short-lived HTTP media URLs from Hub (torrent hash/link candidates only).
+4. Deliver Torrentio/YTS discoveries independently instead of awaiting both before emitting; failures of one source do not cancel valid other results. Emit elapsed milliseconds per batch for benchmarking.
+5. Bound aggregation to a 45-second total federation window, while keeping previously discovered streams; cap provider callback queues at 128 candidates to avoid unbounded memory/backpressure on Android TV.
+6. Prevent caching resolved short-lived HTTP media URLs from Hub (torrent hash/link candidates only).
 
 ## Performance methodology
 Record p50 and p95 across repeated runs, for *each* host/version/content type, and include both cold and warm states:
