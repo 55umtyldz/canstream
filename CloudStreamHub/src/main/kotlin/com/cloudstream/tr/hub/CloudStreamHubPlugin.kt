@@ -40,9 +40,9 @@ class CloudStreamHubPlugin : Plugin() {
     }
 
     private fun showHubSettings(context: Context) {
-        DebridConfig.initFromPreferences(themedContext)
-        HubHomePreferences.load(themedContext)
-        HubAppearancePreferences.load(themedContext)
+        DebridConfig.initFromPreferences(context)
+        HubHomePreferences.load(context)
+        HubAppearancePreferences.load(context)
         val appearance = HubAppearancePreferences.snapshot()
         val themedContext = HubAppearancePreferences.settingsContext(context, appearance)
 
@@ -91,7 +91,7 @@ class CloudStreamHubPlugin : Plugin() {
             HubPerformanceSettings.FEATURE
         )
         val profileSpinner = Spinner(themedContext).apply {
-            adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item,
+            adapter = ArrayAdapter(themedContext, android.R.layout.simple_spinner_dropdown_item,
                 listOf("Otomatik", "Uyumluluk öncelikli", "4K / REMUX öncelikli"))
             setSelection(profileValues.indexOf(HubPerformanceSettings.profile).coerceAtLeast(0))
         }
@@ -165,6 +165,7 @@ class CloudStreamHubPlugin : Plugin() {
             orientation = LinearLayout.VERTICAL
         }
 
+        val arrowWidth = (56 * themedContext.resources.displayMetrics.density).toInt()
         fun renderHomeRows() {
             homeRows.removeAllViews()
             for ((index, sectionId) in homeOrder.withIndex()) {
@@ -212,9 +213,9 @@ class CloudStreamHubPlugin : Plugin() {
                     }
                 }
                 row.addView(check)
-                row.addView(up, LinearLayout.LayoutParams(64,
+                row.addView(up, LinearLayout.LayoutParams(arrowWidth,
                     LinearLayout.LayoutParams.WRAP_CONTENT))
-                row.addView(down, LinearLayout.LayoutParams(64,
+                row.addView(down, LinearLayout.LayoutParams(arrowWidth,
                     LinearLayout.LayoutParams.WRAP_CONTENT))
                 homeRows.addView(row)
             }
