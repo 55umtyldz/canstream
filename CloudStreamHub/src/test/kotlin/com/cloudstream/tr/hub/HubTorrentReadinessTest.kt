@@ -28,6 +28,9 @@ class HubTorrentReadinessTest {
         assertEquals(setOf("link", "index", "preload", "stat"), prepared.queryParameterNames)
         val play = torrentPreparationUrl(url, false).toHttpUrl()
         assertEquals(setOf("link", "index", "play"), play.queryParameterNames)
+        val status = torrentStatusUrl(url).toHttpUrl()
+        assertEquals(setOf("link", "index", "stat"), status.queryParameterNames)
+        assertEquals("2", status.queryParameter("index"))
     }
 
     @Test fun rejectsRemoteMissingOrAmbiguousIndexBeforeNetwork() {
@@ -56,9 +59,12 @@ class HubTorrentReadinessTest {
 
     @Test fun smallFilesAndWarmRetryUseActualBytes() = runBlocking {
         var heads = 0
-        awaitTorrentReadiness(url, TorrentReadinessTransport { _, requestedRange, _, _ ->
+        awaitTorrentReadiness(url, TorrentReadinessTransport { request, requestedRange, _, _ ->
             when {
-                requestedRange == null -> throw IOException("Preload response timeout")
+                requestedRange == null && request.toHttpUrl().queryParameterNames.contains("preload") ->
+                    throw IOException("Preload response timeout")
+                requestedRange == null -> TorrentProbeResponse(200, null,
+                    """{"file_stats":[{"id":2,"path":"Feature.mkv","length":10}]}""".toByteArray())
                 heads++ == 0 -> throw IOException("Not ready")
                 else -> range(0, 9, 10)
             }
@@ -152,6 +158,92 @@ class HubTorrentReadinessTest {
             }, budgetMs = 3000, diagnostic = {})
             fail("Range ignored by server")
         } catch (_: ErrorLoadingException) { assertEquals(1, probes) }
+    }
+
+    @Test fun preloadTimeoutRequiresStatMetadataBeforeByteProbes() = runBlocking {
+        val requests = mutableListOf<Pair<String, String?>>()
+        awaitTorrentReadiness(url, TorrentReadinessTransport { request, requestedRange, _, _ ->
+            val flags = request.toHttpUrl().queryParameterNames
+            requests.add((if ("preload" in flags) "preload" else if ("stat" in flags) "stat" else "play") to requestedRange)
+            when {
+                "preload" in flags -> throw IOException("Client timed out while server preloaded")
+                "stat" in flags -> TorrentProbeResponse(200, null, metadata())
+                requestedRange == "bytes=0-65535" -> range(0, 65_535, 200_000)
+                requestedRange == "bytes=134464-199999" -> range(134_464, 199_999, 200_000)
+                else -> throw AssertionError(request)
+            }
+        }, budgetMs = 4_000, diagnostic = {})
+        assertEquals(listOf(
+            "preload" to null,
+            "stat" to null,
+            "play" to "bytes=0-65535",
+            "play" to "bytes=134464-199999"
+        ), requests)
+    }
+
+    @Test fun preloadTimeoutWithMissingFileMustNotReadAnyMediaBytes() = runBlocking {
+        var ranges = 0
+        try {
+            awaitTorrentReadiness(url, TorrentReadinessTransport { request, requestedRange, _, _ ->
+                if (requestedRange != null) ranges++
+                if (request.toHttpUrl().queryParameterNames.contains("preload")) throw IOException("Preload timed out")
+                TorrentProbeResponse(200, null, """{"file_stats":[{"id":1,"path":"wrong.mkv","length":200000}]}""".toByteArray())
+            }, budgetMs = 3_000, diagnostic = {})
+            fail("Wrong file must never be handed to player")
+        } catch (_: ErrorLoadingException) { assertEquals(0, ranges) }
+    }
+
+    @Test fun malformedStatAfterPreloadTimeoutMustFailClosed() = runBlocking {
+        var rangeReads = 0
+        try {
+            awaitTorrentReadiness(url, TorrentReadinessTransport { request, requestedRange, _, _ ->
+                if (requestedRange != null) rangeReads++
+                if (request.toHttpUrl().queryParameterNames.contains("preload")) throw IOException("Preload timed out")
+                TorrentProbeResponse(200, null, "{invalid".toByteArray())
+            }, budgetMs = 3_000, diagnostic = {})
+            fail("Invalid metadata cannot establish media readiness")
+        } catch (_: ErrorLoadingException) { assertEquals(0, rangeReads) }
+    }
+
+    @Test fun transientStatCanRecoverWithoutAnotherPreload() = runBlocking {
+        var preloads = 0
+        var stats = 0
+        awaitTorrentReadiness(url, TorrentReadinessTransport { request, requestedRange, _, _ ->
+            val flags = request.toHttpUrl().queryParameterNames
+            when {
+                "preload" in flags -> {
+                    preloads++
+                    TorrentProbeResponse(503, null, ByteArray(0))
+                }
+                "stat" in flags -> {
+                    stats++
+                    if (stats == 1) TorrentProbeResponse(503, null, ByteArray(0))
+                    else TorrentProbeResponse(200, null, metadata())
+                }
+                requestedRange == "bytes=0-65535" -> range(0, 65_535, 200_000)
+                requestedRange == "bytes=134464-199999" -> range(134_464, 199_999, 200_000)
+                else -> throw AssertionError(request)
+            }
+        }, budgetMs = 4_000, diagnostic = {})
+        assertEquals(1, preloads)
+        assertEquals(2, stats)
+    }
+
+    @Test fun statusIdZeroOmissionIsOnlyAllowedOnFirstFile() {
+        val valid = TorrentProbeResponse(200, null,
+            """{"file_stats":[{"path":"Feature.mkv","length":200000},{"id":1,"path":"sample.txt","length":100}]}""".toByteArray())
+        assertEquals(0, selectedTorrentVideo(valid, 0).index)
+        val malformed = listOf(
+            """{"file_stats":[{"id":1,"path":"sample.txt","length":100},{"path":"Feature.mkv","length":200000}]}""",
+            """{"file_stats":[{"id":"0","path":"Feature.mkv","length":200000}]}""",
+            """{"file_stats":[{"id":2,"path":"A.mkv","length":200000},{"id":2,"path":"B.mkv","length":200000}]}"""
+        )
+        malformed.forEachIndexed { index, json ->
+            try {
+                selectedTorrentVideo(TorrentProbeResponse(200, null, json.toByteArray()), if (index < 2) 0 else 2)
+                fail("Ambiguous or malformed index must fail")
+            } catch (_: ErrorLoadingException) { }
+        }
     }
 
     @Test fun preparationTimeoutIsFriendlyAndDoesNotBecomeReady() = runBlocking {

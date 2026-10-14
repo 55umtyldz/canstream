@@ -84,6 +84,13 @@ internal fun torrentPreparationUrl(url: String, preload: Boolean): String {
     return builder.build().toString()
 }
 
+/** Stat-only avoids restarting a synchronous preload after its HTTP response times out. */
+internal fun torrentStatusUrl(url: String): String = torrentPreparationUrl(url, true)
+    .toHttpUrl().newBuilder().removeAllQueryParameters("preload").build().toString()
+
+private fun retryableTorrentStatus(code: Int): Boolean =
+    code == 408 || code == 425 || code == 429 || code in 500..599
+
 
 /**
  * TorrServer's preload&stat response contains zero-based file_stats.
@@ -105,8 +112,19 @@ internal fun selectedTorrentVideo(response: TorrentProbeResponse, index: Int): S
     if (!files.isArray || files.size() == 0) {
         throw ErrorLoadingException("Torrent dosya listesi alınamadı; dosya seçimi doğrulanamadı.")
     }
-    val file = files.firstOrNull { it.path("id").asInt(0) == index }
-        ?: throw ErrorLoadingException("Seçilen torrent dosyası bulunamadı (index=$index).")
+    // TorrServer omits id=0 only for the first file. Missing/malformed IDs
+    // elsewhere must not silently select sample or subtitle files.
+    val matches = files.mapIndexedNotNull { position, entry ->
+        val id = entry.get("id")
+        val fileIndex = when {
+            id == null && position == 0 -> 0
+            id != null && id.isIntegralNumber && id.canConvertToInt() -> id.asInt()
+            else -> -1
+        }
+        if (fileIndex == index) entry else null
+    }
+    val file = matches.singleOrNull()
+        ?: throw ErrorLoadingException("Seçilen torrent dosyası bulunamadı veya belirsiz (index=$index).")
     val length = file.path("length").asLong(0L)
     val path = file.path("path").asText("")
     val extension = path.substringAfterLast('.', "").lowercase(Locale.ROOT)
@@ -137,44 +155,59 @@ internal suspend fun awaitTorrentReadiness(
     diagnostic: (String) -> Unit = { android.util.Log.i("CloudStreamHub", "Torrent hazırlık: $it") }
 ) {
     val preloadUrl = torrentPreparationUrl(url, true)
+    val statusUrl = torrentStatusUrl(url)
     val playUrl = torrentPreparationUrl(url, false)
-    val selectedIndex = url.toHttpUrl().queryParameter("index")!!.toInt()
+    val selectedIndex = preloadUrl.toHttpUrl().queryParameter("index")!!.toInt()
     val ready = withTimeoutOrNull(budgetMs) {
-        var expectedFileSize: Long? = null
+        var selectedVideo: SelectedTorrentVideo? = null
         diagnostic("ön yükleme")
         try {
-            val result = transport.get(preloadUrl, null, minOf(60_000, budgetMs), 1_048_576)
+            val result = transport.get(preloadUrl, null, minOf(60_000L, budgetMs), 1_048_576)
             diagnostic("ön yükleme HTTP ${result.code}")
-            val video = selectedTorrentVideo(result, selectedIndex)
-            expectedFileSize = video.byteLength
-            diagnostic("seçilen video doğrulandı: .${video.extension}, ${video.byteLength} bayt")
+            if (!retryableTorrentStatus(result.code)) {
+                selectedVideo = selectedTorrentVideo(result, selectedIndex)
+            }
         } catch (e: IOException) {
-            // A timed out client does not stop the host's synchronous preload. Verify real bytes.
-            diagnostic("ön yükleme yanıtı beklenemedi; veri kontrolü")
+            // Client-side timeout does not cancel the server's synchronous preload.
+            // A stat-only follow-up must confirm the file before any byte probes.
+            diagnostic("ön yükleme yanıtı beklenemedi; ayrı dosya kontrolü")
         }
+
+        while (selectedVideo == null) {
+            currentCoroutineContext().ensureActive()
+            try {
+                val result = transport.get(statusUrl, null, 10_000L, 1_048_576)
+                diagnostic("dosya durumu HTTP ${result.code}")
+                if (retryableTorrentStatus(result.code)) throw IOException("Torrent metadata henüz hazır değil")
+                selectedVideo = selectedTorrentVideo(result, selectedIndex)
+            } catch (e: IOException) {
+                diagnostic("dosya bilgisi bekleniyor")
+                delay(1_000)
+            }
+        }
+
+        // File identity is mandatory, including when preload's initial request timed out.
+        val expectedFileSize = selectedVideo.byteLength
+        diagnostic("seçilen video doğrulandı: .${selectedVideo.extension}, $expectedFileSize bayt")
         while (true) {
             currentCoroutineContext().ensureActive()
             try {
                 diagnostic("başlangıç verisi")
-                val head = transport.get(playUrl, "bytes=0-65535", 15_000, 65_536)
+                val head = transport.get(playUrl, "bytes=0-65535", 15_000L, 65_536)
                 diagnostic("başlangıç HTTP ${head.code}")
-                if (head.code in setOf(408, 425, 429, 500, 502, 503, 504)) throw IOException("Torrent henüz veri sunamıyor")
+                if (retryableTorrentStatus(head.code)) throw IOException("Torrent henüz veri sunamıyor")
                 val size = validateTorrentRange(head, 0, 65_535, expectedFileSize)
                 diagnostic("son veri")
                 val start = maxOf(0, size - 65_536)
-                val tail = transport.get(playUrl, "bytes=$start-${size - 1}", 15_000, 65_536)
+                val tail = transport.get(playUrl, "bytes=$start-${size - 1}", 15_000L, 65_536)
                 diagnostic("son HTTP ${tail.code}")
-                if (tail.code in setOf(408, 425, 429, 500, 502, 503, 504)) throw IOException("Torrentin son parçaları henüz hazır değil")
+                if (retryableTorrentStatus(tail.code)) throw IOException("Torrentin son parçaları henüz hazır değil")
                 validateTorrentRange(tail, start, size - 1, size)
                 diagnostic("hazır")
                 return@withTimeoutOrNull true
             } catch (e: IOException) {
                 diagnostic("parçalar bekleniyor")
                 delay(1_000)
-            } catch (e: ErrorLoadingException) {
-                // HTTP 401/403/404, range ignored (200), or mismatched selected
-                // file sizes are permanent handoff failures, not peer delays.
-                throw e
             } catch (e: CancellationException) {
                 throw e
             }

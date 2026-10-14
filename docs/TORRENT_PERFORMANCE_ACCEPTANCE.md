@@ -11,7 +11,7 @@ A valid magnet, a Torrentio stream entry, successful HTTP 206 or passing unit te
 - Byte-range support comes from `http.ServeContent`; malformed range or wrong selected file must not be presented as playback-ready.
 
 ## Scope of runtime changes
-1. Check the server-reported file metadata before handing off to external players. Reject missing index, non-video selection and inconsistent file size. Recognize `.m2ts` for Blu-ray transport streams. Do **not** treat `.iso` as directly playable.
+1. Check the server-reported file metadata before handing off to external players. If preload HTTP times out or returns a transient error, follow up with a **stat-only** request; media probes are forbidden until selected file identity is verified. Reject missing/ambiguous index, non-video selection and inconsistent file size. Recognize `.m2ts` for Blu-ray transport streams. Do **not** treat `.iso` as directly playable.
 2. Retain bounded head/tail byte probes and preserve cancellation. Transient server responses (408/425/429/5xx) retry; invalid/missing range protocol and file identity mismatches fail early.
 3. Keep different file indices of a multi-file torrent distinct during source selection (same info hash is not the same episode).
 4. Deliver Torrentio/YTS discoveries independently instead of awaiting both before emitting; failures of one source do not cancel valid other results. Emit elapsed milliseconds per batch for benchmarking.
