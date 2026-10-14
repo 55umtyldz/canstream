@@ -28,6 +28,24 @@ class HubLinkSelectionTest {
         assertEquals(selected, HubTorrentSelector.select(links.reversed()))
     }
 
+    @Test fun profileRankingKeepsPeerHealthPrimaryButCanPreferBluRayFeature() {
+        val regular = torrent(91, seeds = 30, quality = 2160)
+        val remux = ExtractorLink(
+            source = "Torrentio", name = "2160p BluRay REMUX (25 seeds)",
+            url = torrent(92).url, referer = "", quality = 2160, type = ExtractorLinkType.MAGNET
+        )
+        assertTrue(HubTorrentSelector.sourceScore(regular, HubPerformanceSettings.AUTO) >
+            HubTorrentSelector.sourceScore(remux, HubPerformanceSettings.AUTO))
+        assertTrue(HubTorrentSelector.sourceScore(remux, HubPerformanceSettings.FEATURE) >
+            HubTorrentSelector.sourceScore(regular, HubPerformanceSettings.FEATURE))
+        val difficult = ExtractorLink(
+            source = "Torrentio", name = "2160p DOVI TrueHD (30 seeds)",
+            url = torrent(93).url, referer = "", quality = 2160, type = ExtractorLinkType.MAGNET
+        )
+        assertTrue(HubTorrentSelector.sourceScore(regular, HubPerformanceSettings.COMPATIBLE) >
+            HubTorrentSelector.sourceScore(difficult, HubPerformanceSettings.COMPATIBLE))
+    }
+
     @Test fun sameSwarmIsOneAlternativeButDifferentIndexIsNotRewritten() {
         val torrentio = torrent(1, seeds = 100)
         val yts = torrent(1, "YTS", seeds = 0, tracker = "b")

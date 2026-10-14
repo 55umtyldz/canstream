@@ -147,7 +147,20 @@ internal object HubTorrentSelector {
     private fun identity(link: ExtractorLink): String = swarm(link) + ":" + (file(link) ?: "unknown")
     private fun seeds(link: ExtractorLink): Int = Regex("(\\d+)\\s+seeds", RegexOption.IGNORE_CASE)
         .find(link.name)?.groupValues?.get(1)?.toIntOrNull() ?: 0
-    private val rank = compareByDescending<ExtractorLink> { seeds(it) }
+    /** Never mistake a marketing "4K" label for verified playable throughput. */
+    internal fun sourceScore(link: ExtractorLink, profile: String = HubPerformanceSettings.profile): Int {
+        val name = link.name.lowercase(Locale.ROOT)
+        val peers = seeds(link).coerceIn(0, 100)
+        var score = peers * 10
+        val remux = Regex("""\b(remux|bdremux)\b""").containsMatchIn(name)
+        val bluRay = Regex("""\b(blu[ .-]?ray|bdrip)\b""").containsMatchIn(name)
+        val demanding = Regex("""\b(dovi|dv|truehd|dts-hd|hevc|x265)\b""").containsMatchIn(name)
+        if (remux) score += if (profile == HubPerformanceSettings.FEATURE) 170 else 65
+        else if (bluRay) score += 25
+        if (profile == HubPerformanceSettings.COMPATIBLE && demanding) score -= 90
+        return score
+    }
+    private val rank = compareByDescending<ExtractorLink> { sourceScore(it) }
         .thenBy { it.source.lowercase(Locale.ROOT) }.thenBy { swarm(it) }
         .thenBy { file(it).orEmpty() }.thenBy { it.url }
 
