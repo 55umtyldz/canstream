@@ -76,6 +76,18 @@ class HubLinkSelectionTest {
         assertEquals(1, emitted.size)
     }
 
+    @Test fun cachedMagnetsAreOnlyPublishedThroughTorrentPolicy() {
+        val cached = torrent(10, "YTS", quality = 2160)
+        val fresh = torrent(11, "Torrentio", quality = 2160)
+        val emitted = mutableListOf<ExtractorLink>()
+        val collector = HubLinkCollector(true, false, emitted::add)
+        collector.direct(cached)
+        assertTrue("Direct path must never publish a magnet", emitted.isEmpty())
+        collector.torrents(listOf(fresh))
+        collector.torrents(HubTorrentSelector.cachedFallback(listOf(cached), listOf(fresh), true))
+        assertEquals(listOf(fresh, cached), emitted)
+    }
+
     @Test fun cacheOnlySuppliesUnavailableOriginsWithoutExceedingQuota() {
         val fresh = listOf(torrent(1), torrent(2), torrent(3))
         val cached = listOf(torrent(4), torrent(5, "YTS"), torrent(6, "Federated"))
@@ -89,6 +101,41 @@ class HubLinkSelectionTest {
         assertTrue(emitted.contains(cached[1]))
         assertFalse(emitted.contains(cached[0]))
         assertEquals(listOf(cached[2]), HubTorrentSelector.cachedFallback(cached, fresh, false))
+    }
+
+    @Test fun lateBluRayCandidatesRetainReservedQueueSlots() {
+        val standard = java.util.concurrent.atomic.AtomicInteger(0)
+        val feature = java.util.concurrent.atomic.AtomicInteger(0)
+        val low = torrent(91, quality = 720)
+        val featureLink = torrent(92, quality = 2160)
+        assertEquals(HubCandidateBudget.MAX_STANDARD, (1..140).count {
+            HubCandidateBudget.admit(low, standard, feature)
+        })
+        assertEquals(HubCandidateBudget.RESERVED_FEATURE, (1..60).count {
+            HubCandidateBudget.admit(featureLink, standard, feature)
+        })
+        assertEquals(128, HubCandidateBudget.MAX_STANDARD + HubCandidateBudget.RESERVED_FEATURE)
+        assertTrue(HubCandidateBudget.isFeatureCandidate(ExtractorLink(source = "Torrentio", name = "Feature.BluRay.REMUX", url = "magnet:?xt=urn:btih:${"a".repeat(40)}&index=0", referer = "", quality = -1, type = ExtractorLinkType.MAGNET)))
+        assertFalse(HubCandidateBudget.isFeatureCandidate(low))
+    }
+
+    @Test fun torrentSourceBudgetStopsSlowOriginWithoutDroppingFastBatch() = kotlinx.coroutines.test.runTest {
+        val emitted = mutableListOf<String>()
+        val finished = HubSourceBudget.run(20) {
+            emitted.add("2160p Remux")
+            delay(100_000)
+        }
+        assertFalse(finished)
+        assertEquals(listOf("2160p Remux"), emitted)
+        assertEquals(20L, testScheduler.currentTime)
+    }
+
+    @Test fun torrentSourceBudgetDoesNotSwallowCancellation() = kotlinx.coroutines.test.runTest {
+        val cancelled = CancellationException("player closed")
+        try {
+            HubSourceBudget.run(HubSourceBudget.TORRENT_DISCOVERY_MS) { throw cancelled }
+            fail("Must rethrow cancellation")
+        } catch (e: CancellationException) { assertSame(cancelled, e) }
     }
 
     @Test fun candidateCapKeepsProviderMemoryBounded() {

@@ -15,8 +15,8 @@ A valid magnet, a Torrentio stream entry, successful HTTP 206 or passing unit te
 2. Retain bounded head/tail byte probes and preserve cancellation. Transient server responses (408/425/429/5xx) retry; invalid/missing range protocol and file identity mismatches fail early.
 3. Keep different file indices of a multi-file torrent distinct during source selection (same info hash is not the same episode).
 4. Deliver Torrentio/YTS discoveries independently instead of awaiting both before emitting; failures of one source do not cancel valid other results. Emit elapsed milliseconds per batch for benchmarking.
-5. Bound aggregation to a 45-second total federation window, while keeping previously discovered streams; cap provider callback queues at 128 candidates to avoid unbounded memory/backpressure on Android TV.
-6. Prevent caching resolved short-lived HTTP media URLs from Hub (torrent hash/link candidates only).
+5. Bound aggregation to a 45-second total federation window, plus independent 20-second torrent/direct discovery ceilings; already-emitted links survive expiration. Cap provider callback queues at 128 candidates with a reserved high-quality 32-candidate lane, so late-arriving 2160p/REMUX results are not excluded solely because low-resolution links arrived first.
+6. Prevent caching resolved short-lived HTTP media URLs from Hub (torrent hash/link candidates only). Only emit cached torrents through the torrent policy **after** fresh sources, never through the direct-media collector (which deliberately rejects magnets).
 
 ## Performance methodology
 Record p50 and p95 across repeated runs, for *each* host/version/content type, and include both cold and warm states:

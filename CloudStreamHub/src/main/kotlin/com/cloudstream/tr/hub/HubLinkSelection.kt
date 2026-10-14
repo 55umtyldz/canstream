@@ -5,14 +5,45 @@ import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import java.net.URLDecoder
 import java.util.Locale
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.withTimeoutOrNull
 
 internal object HubCandidateBudget {
     const val MAX_PER_PROVIDER = 128
+    const val RESERVED_FEATURE = 32
+    const val MAX_STANDARD = MAX_PER_PROVIDER - RESERVED_FEATURE
+
+    /** Late-arriving 2160p / Blu-ray releases must not be dropped after 96 lower-quality links. */
+    fun isFeatureCandidate(link: ExtractorLink): Boolean {
+        if (link.quality >= 2160) return true
+        return Regex("""\b(2160p|4k|remux|blu[ -]?ray|bdremux)\b""", RegexOption.IGNORE_CASE)
+            .containsMatchIn(link.name)
+    }
+
     fun allow(receivedCount: Int): Boolean = receivedCount in 1..MAX_PER_PROVIDER
+
+    /**
+     * Each callback is counted in exactly one lane. Total admitted <= 128;
+     * 32 slots remain available for feature candidates even if 96 standard links arrived first.
+     */
+    fun admit(link: ExtractorLink, standardCount: AtomicInteger, featureCount: AtomicInteger): Boolean {
+        val (counter, limit) = if (isFeatureCandidate(link)) {
+            featureCount to RESERVED_FEATURE
+        } else {
+            standardCount to MAX_STANDARD
+        }
+        return counter.incrementAndGet() <= limit
+    }
 }
 
 /** Total federation time budget: prevents N provider groups each taking 30s. */
+internal object HubSourceBudget {
+    const val TORRENT_DISCOVERY_MS = 20_000L
+    const val DIRECT_DISCOVERY_MS = 20_000L
+    suspend fun run(limitMs: Long, block: suspend () -> Unit): Boolean =
+        withTimeoutOrNull(limitMs) { block(); true } ?: false
+}
+
 internal object HubFederationBudget {
     const val DEFAULT_MS = 45_000L
 

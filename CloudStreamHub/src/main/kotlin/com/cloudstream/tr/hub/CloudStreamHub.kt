@@ -284,11 +284,9 @@ class CloudStreamHub : MainAPI() {
         }
 
         val cachedLinks = com.cloudstream.tr.core.streaming.StreamCacheManager.get(cacheKey)?.let(::cacheableHubLinks)
-        if (!cachedLinks.isNullOrEmpty()) {
-            for (link in cachedLinks) {
-                collector.direct(link)
-            }
-        }
+        // Do not deliver cached magnets through collector.direct(): it drops torrents.
+        // Publish cached candidates only after fresh resolution so they cannot occupy
+        // the limited quality quotas before fresher 4K/REMUX links are considered.
 
         // 1. Automated Turkish Subtitles via OpenSubtitles
         fetchSubtitlesInBackground()
@@ -296,12 +294,18 @@ class CloudStreamHub : MainAPI() {
         return coroutineScope {
             // Direct HTTP resolution and federation must not block the torrent pair or each other.
             val directJob = launch {
-                try {
-                    com.cloudstream.tr.core.resolvers.FourKhubResolver.resolve(
-                        title = payload.title, year = payload.year, isMovie = payload.isMovie,
-                        season = payload.season, episode = payload.episode
-                    ).forEach(interceptedCallback)
-                } catch (e: CancellationException) { throw e } catch (_: Exception) {}
+                val completed = HubSourceBudget.run(HubSourceBudget.DIRECT_DISCOVERY_MS) {
+                    try {
+                        com.cloudstream.tr.core.resolvers.FourKhubResolver.resolve(
+                            title = payload.title, year = payload.year, isMovie = payload.isMovie,
+                            season = payload.season, episode = payload.episode
+                        ).forEach(interceptedCallback)
+                    } catch (e: CancellationException) { throw e } catch (_: Exception) {}
+                }
+                if (!completed) DiagnosticLogger.log(
+                    provider = name, stage = DiagnosticStage.LOAD, category = DiagnosticCategory.NETWORK,
+                    message = "Direct source discovery exceeded the 20-second limit."
+                )
             }
             val torrentJob = launch {
                 val imdbId = payload.imdbId
@@ -322,6 +326,7 @@ class CloudStreamHub : MainAPI() {
                     }
                     // Emit the first completed source immediately. A slower YTS/Torrentio
                     // request must not delay an already available 4K source.
+                    val completed = HubSourceBudget.run(HubSourceBudget.TORRENT_DISCOVERY_MS) {
                     resolveHubSourcesProgressively(
                         resolvers = resolvers,
                         onBatch = { batch ->
@@ -341,6 +346,11 @@ class CloudStreamHub : MainAPI() {
                                 message = "Torrent source failed (${failure.javaClass.simpleName})"
                             )
                         }
+                    )
+                    }
+                    if (!completed) DiagnosticLogger.log(
+                        provider = name, stage = DiagnosticStage.LOAD, category = DiagnosticCategory.NETWORK,
+                        message = "Torrent discovery exceeded the 20-second limit; completed source batches retained."
                     )
                     // Reuse only candidates from origins that returned no fresh sources.
                     val fallback = HubTorrentSelector.cachedFallback(cachedLinks.orEmpty(), fresh.toList(), true)
@@ -406,6 +416,8 @@ class CloudStreamHub : MainAPI() {
                                 val channel = Channel<ExtractorLink>(capacity = HubCandidateBudget.MAX_PER_PROVIDER)
                                 val seenUrls = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
                                 val rawLinksReceived = AtomicInteger(0)
+                                val standardCandidates = AtomicInteger(0)
+                                val featureCandidates = AtomicInteger(0)
                                 var duplicatesDropped = 0
                                 var channelOverflowDropped = 0
                                 var preflightValid = 0
@@ -480,8 +492,8 @@ class CloudStreamHub : MainAPI() {
                                             isCasting = isCasting,
                                             subtitleCallback = subtitleCallback,
                                             callback = { rawLink ->
-                                                val received = rawLinksReceived.incrementAndGet()
-                                                if (HubCandidateBudget.allow(received)) {
+                                                rawLinksReceived.incrementAndGet()
+                                                if (HubCandidateBudget.admit(rawLink, standardCandidates, featureCandidates)) {
                                                     val result = channel.trySend(rawLink)
                                                     if (!result.isSuccess) channelOverflowDropped++
                                                 } else {
@@ -548,6 +560,12 @@ class CloudStreamHub : MainAPI() {
             collector.torrents(freshFederation + HubTorrentSelector.cachedFallback(
                 cachedLinks.orEmpty(), collector.snapshot() + freshFederation, false
             ))
+            // If a torrent origin was not reachable during this run, cached candidates
+            // are retained as a fallback; they never preempt fresher sources.
+            if (!torrentSourcesEnabled) DiagnosticLogger.log(
+                provider = name, stage = DiagnosticStage.LOAD, category = DiagnosticCategory.SOURCE_DISCOVERY,
+                message = "P2P disabled; cached torrents were not emitted."
+            )
             flushCollectedLinks()
             collector.snapshot().isNotEmpty()
         }
