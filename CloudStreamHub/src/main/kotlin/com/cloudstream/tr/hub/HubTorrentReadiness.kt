@@ -9,6 +9,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import okhttp3.ConnectionPool
 import okhttp3.Call
 import okhttp3.Callback
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -27,7 +28,12 @@ internal fun interface TorrentReadinessTransport {
 }
 
 private val readinessClient = OkHttpClient.Builder()
-    .followRedirects(false).followSslRedirects(false).build()
+    .followRedirects(false)
+    .followSslRedirects(false)
+    .connectionPool(ConnectionPool(4, 5, TimeUnit.MINUTES))
+    .connectTimeout(5, TimeUnit.SECONDS)
+    .readTimeout(75, TimeUnit.SECONDS)
+    .build()
 
 /** Never follows redirects; cancellation remains registered while the bounded body is read. */
 internal object LocalTorrentTransport : TorrentReadinessTransport {
@@ -35,8 +41,8 @@ internal object LocalTorrentTransport : TorrentReadinessTransport {
         require(isLocalTorrentStream(url))
         val request = Request.Builder().url(url).header("Accept-Encoding", "identity")
         range?.let { request.header("Range", it) }
-        val call = readinessClient.newBuilder().callTimeout(timeoutMs, TimeUnit.MILLISECONDS)
-            .readTimeout(timeoutMs, TimeUnit.MILLISECONDS).build().newCall(request.build())
+        val call = readinessClient.newCall(request.build())
+        call.timeout().timeout(timeoutMs, TimeUnit.MILLISECONDS)
         return suspendCancellableCoroutine { continuation ->
             continuation.invokeOnCancellation { call.cancel() }
             call.enqueue(object : Callback {
@@ -87,6 +93,12 @@ internal fun torrentPreparationUrl(url: String, preload: Boolean): String {
 /** Stat-only avoids restarting a synchronous preload after its HTTP response times out. */
 internal fun torrentStatusUrl(url: String): String = torrentPreparationUrl(url, true)
     .toHttpUrl().newBuilder().removeAllQueryParameters("preload").build().toString()
+
+internal fun torrentReadinessBudget(profile: String): Long =
+    if (profile == HubPerformanceSettings.FEATURE) 120_000L else 90_000L
+
+private fun readinessBackoff(attempt: Int): Long =
+    minOf(1_500L, 250L * (1L shl attempt.coerceIn(0, 3)))
 
 private fun retryableTorrentStatus(code: Int): Boolean =
     code == 408 || code == 425 || code == 429 || code in 500..599
@@ -160,6 +172,9 @@ internal suspend fun awaitTorrentReadiness(
     val selectedIndex = preloadUrl.toHttpUrl().queryParameter("index")!!.toInt()
     val ready = withTimeoutOrNull(budgetMs) {
         var selectedVideo: SelectedTorrentVideo? = null
+        var statusRetries = 0
+        var rangeRetries = 0
+        val preloadStarted = System.nanoTime()
         diagnostic("ön yükleme")
         try {
             val result = transport.get(preloadUrl, null, minOf(60_000L, budgetMs), 1_048_576)
@@ -171,18 +186,25 @@ internal suspend fun awaitTorrentReadiness(
             // Client-side timeout does not cancel the server's synchronous preload.
             // A stat-only follow-up must confirm the file before any byte probes.
             diagnostic("ön yükleme yanıtı beklenemedi; ayrı dosya kontrolü")
+        } finally {
+            HubPerformanceTelemetry.record("torrent_preload",
+                (System.nanoTime() - preloadStarted) / 1_000_000,
+                if (selectedVideo != null) "metadata_ready" else "metadata_pending")
         }
 
         while (selectedVideo == null) {
             currentCoroutineContext().ensureActive()
             try {
+                val statStart = System.nanoTime()
                 val result = transport.get(statusUrl, null, 10_000L, 1_048_576)
+                HubPerformanceTelemetry.record("torrent_stat",
+                    (System.nanoTime() - statStart) / 1_000_000, "HTTP_" + result.code)
                 diagnostic("dosya durumu HTTP ${result.code}")
                 if (retryableTorrentStatus(result.code)) throw IOException("Torrent metadata henüz hazır değil")
                 selectedVideo = selectedTorrentVideo(result, selectedIndex)
             } catch (e: IOException) {
                 diagnostic("dosya bilgisi bekleniyor")
-                delay(1_000)
+                delay(readinessBackoff(statusRetries++))
             }
         }
 
@@ -193,21 +215,28 @@ internal suspend fun awaitTorrentReadiness(
             currentCoroutineContext().ensureActive()
             try {
                 diagnostic("başlangıç verisi")
+                val headStart = System.nanoTime()
                 val head = transport.get(playUrl, "bytes=0-65535", 15_000L, 65_536)
+                HubPerformanceTelemetry.record("torrent_head_range",
+                    (System.nanoTime() - headStart) / 1_000_000, "HTTP_" + head.code)
                 diagnostic("başlangıç HTTP ${head.code}")
                 if (retryableTorrentStatus(head.code)) throw IOException("Torrent henüz veri sunamıyor")
                 val size = validateTorrentRange(head, 0, 65_535, expectedFileSize)
                 diagnostic("son veri")
                 val start = maxOf(0, size - 65_536)
+                val tailStart = System.nanoTime()
                 val tail = transport.get(playUrl, "bytes=$start-${size - 1}", 15_000L, 65_536)
+                HubPerformanceTelemetry.record("torrent_tail_range",
+                    (System.nanoTime() - tailStart) / 1_000_000, "HTTP_" + tail.code)
                 diagnostic("son HTTP ${tail.code}")
                 if (retryableTorrentStatus(tail.code)) throw IOException("Torrentin son parçaları henüz hazır değil")
                 validateTorrentRange(tail, start, size - 1, size)
                 diagnostic("hazır")
+                HubPerformanceTelemetry.record("torrent_ready", 0L)
                 return@withTimeoutOrNull true
             } catch (e: IOException) {
                 diagnostic("parçalar bekleniyor")
-                delay(1_000)
+                delay(readinessBackoff(rangeRetries++))
             } catch (e: CancellationException) {
                 throw e
             }
@@ -217,6 +246,8 @@ internal suspend fun awaitTorrentReadiness(
     currentCoroutineContext().ensureActive()
     if (ready != true) {
         diagnostic("süre doldu")
-        throw ErrorLoadingException("Torrentin başlangıç ve son parçaları 90 saniyede hazırlanamadı. Başka bir kaynak deneyiniz.")
+        HubPerformanceTelemetry.record("torrent_readiness", budgetMs, "timeout")
+        throw ErrorLoadingException("Torrentin başlangıç ve son parçaları " +
+            (budgetMs / 1000) + " saniyede hazırlanamadı. Başka bir kaynak deneyiniz.")
     }
 }
