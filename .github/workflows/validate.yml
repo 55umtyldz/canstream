@@ -50,3 +50,23 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew testDebugUnitTest --parallel --continue
+
+      # A PR is not published to the builds branch. Provide a testable .cs3
+      # without changing the live extension repository.
+      - name: Build CloudStreamHub PR plugin (do not publish)
+        if: github.event_name == 'pull_request'
+        run: |
+          ./gradlew :CloudStreamHub:make
+          artifact_path="$(find . -type f -name 'CloudStreamHub.cs3' -print -quit)"
+          test -n "$artifact_path" && test -s "$artifact_path"
+          mkdir -p pr-test-artifact
+          cp "$artifact_path" pr-test-artifact/CloudStreamHub.cs3
+
+      - name: Upload CloudStreamHub test plugin
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: CloudStreamHub-pr-${{ github.event.pull_request.number }}-${{ github.sha }}
+          path: pr-test-artifact/CloudStreamHub.cs3
+          if-no-files-found: error
+          retention-days: 14

@@ -27,6 +27,12 @@ Record p50 and p95 across repeated runs, for *each* host/version/content type, a
 - 1080p single-file MKV; 2160p HEVC; 2160p Blu-ray REMUX with TrueHD/DTS-HD; multi-file series torrent; zero/low peer negative case.
 - CloudStream built-in, VLC and MX Player on **actual Android TV**, separately. Never infer codec support from the torrent title alone.
 
+## Obtaining a candidate for device verification
+- Open the **Validate** GitHub Actions run from this PR. Once checks complete successfully, download the `CloudStreamHub-pr-...` workflow artifact, unzip it, and verify it contains `CloudStreamHub.cs3`.
+- This is **not** a production release. The workflow does not push to `main` or `builds`; the artifact is intended for controlled manual installation according to the CloudStream host's supported local testing method. If local plugin installation is unavailable, do not publish the unverified candidate through the production repository; use an isolated test distribution.
+- Run the same device/content cases with both the current production plugin and the PR candidate; record CloudStream version, TV model, player, first frame, audio, 25%/75% seek and 10-minute buffering.
+- Artifact success proves packaging, **not** runtime 4K decode or torrent swarm reliability.
+
 ## Mandatory manual checks before marking playback resolved
 - [ ] On Android TV, selected movie/episode matches intended file and stream index.
 - [ ] 2160p MKV/Remux first frame and audio work on real device, not just HTTP probes.
