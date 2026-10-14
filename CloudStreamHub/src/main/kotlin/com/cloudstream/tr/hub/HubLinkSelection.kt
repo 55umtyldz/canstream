@@ -155,7 +155,7 @@ internal object HubTorrentSelector {
         val remux = Regex("""\b(remux|bdremux)\b""").containsMatchIn(name)
         val bluRay = Regex("""\b(blu[ .-]?ray|bdrip)\b""").containsMatchIn(name)
         val demanding = Regex("""\b(dovi|dv|truehd|dts-hd|hevc|x265)\b""").containsMatchIn(name)
-        if (remux) score += if (profile == HubPerformanceSettings.FEATURE) 170 else 65
+        if (remux) score += if (profile == HubPerformanceSettings.FEATURE) 170 else 30
         else if (bluRay) score += 25
         if (profile == HubPerformanceSettings.COMPATIBLE && demanding) score -= 90
         return score
