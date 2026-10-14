@@ -112,6 +112,51 @@ private fun retryableTorrentStatus(code: Int): Boolean =
  */
 internal data class SelectedTorrentVideo(val index: Int, val byteLength: Long, val extension: String)
 
+/**
+ * Read-only throughput and peer snapshot returned by TorrServer preload/stat.
+ * Loaded torrent bytes are NOT a guarantee of bytes buffered at playback position.
+ */
+internal data class TorrentTransferHealth(
+    val downloadMbps: Double?,
+    val activePeers: Int?,
+    val connectedSeeders: Int?,
+    val preloadPercent: Int?,
+    val requiredAverageMbps: Double?
+) {
+    fun safeSummary(): String = buildString {
+        if (downloadMbps != null) append("down_").append("%.1f".format(Locale.ROOT, downloadMbps)).append("Mbps")
+        if (activePeers != null) append("_peers_").append(activePeers)
+        if (connectedSeeders != null) append("_seeds_").append(connectedSeeders)
+        if (preloadPercent != null) append("_preload_").append(preloadPercent).append("pct")
+        if (requiredAverageMbps != null) append("_avg_").append("%.1f".format(Locale.ROOT, requiredAverageMbps)).append("Mbps")
+    }.take(100)
+}
+
+internal fun torrentTransferHealth(response: TorrentProbeResponse, selectedBytes: Long): TorrentTransferHealth? {
+    if (response.code != 200) return null
+    val root = try { ObjectMapper().readTree(response.bytes) } catch (_: Exception) { return null }
+    if (root == null || !root.isObject) return null
+    fun number(key: String): Double? = root.path(key).takeIf { it.isNumber }?.asDouble()
+    fun count(key: String): Int? = root.path(key).takeIf { it.isIntegralNumber && it.asInt() >= 0 }?.asInt()
+    val speed = number("download_speed")?.takeIf { it >= 0.0 && it.isFinite() }?.div(125_000)
+    val progress = number("preloaded_bytes")
+    val target = number("preload_size")
+    val percent = if (progress != null && target != null && target > 0)
+        (progress / target * 100).toInt().coerceIn(0, 100) else null
+    val duration = number("duration_seconds")?.takeIf { it > 0.0 && it.isFinite() }
+    val avgMbps = duration?.let { selectedBytes.toDouble() * 8 / it / 1_000_000 }
+    val snapshot = TorrentTransferHealth(speed, count("active_peers"), count("connected_seeders"),
+        percent, avgMbps)
+    return if (listOf(snapshot.downloadMbps, snapshot.activePeers, snapshot.connectedSeeders,
+            snapshot.preloadPercent, snapshot.requiredAverageMbps).all { it == null }) null else snapshot
+}
+
+private fun recordTorrentHealth(response: TorrentProbeResponse, selectedBytes: Long) {
+    torrentTransferHealth(response, selectedBytes)?.let {
+        HubPerformanceTelemetry.record("torrent_network", 0, it.safeSummary())
+    }
+}
+
 internal fun selectedTorrentVideo(response: TorrentProbeResponse, index: Int): SelectedTorrentVideo {
     if (response.code != 200) throw ErrorLoadingException("Torrent sunucusu dosya bilgisi döndürmedi (HTTP ${response.code}).")
     val root = try {
@@ -181,6 +226,7 @@ internal suspend fun awaitTorrentReadiness(
             diagnostic("ön yükleme HTTP ${result.code}")
             if (!retryableTorrentStatus(result.code)) {
                 selectedVideo = selectedTorrentVideo(result, selectedIndex)
+                recordTorrentHealth(result, selectedVideo.byteLength)
             }
         } catch (e: IOException) {
             // Client-side timeout does not cancel the server's synchronous preload.
@@ -202,6 +248,7 @@ internal suspend fun awaitTorrentReadiness(
                 diagnostic("dosya durumu HTTP ${result.code}")
                 if (retryableTorrentStatus(result.code)) throw IOException("Torrent metadata henüz hazır değil")
                 selectedVideo = selectedTorrentVideo(result, selectedIndex)
+                recordTorrentHealth(result, selectedVideo.byteLength)
             } catch (e: IOException) {
                 diagnostic("dosya bilgisi bekleniyor")
                 delay(readinessBackoff(statusRetries++))

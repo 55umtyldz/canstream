@@ -29,6 +29,26 @@ class HubTorrentReadinessTest {
         assertEquals(90_000L, torrentReadinessBudget(HubPerformanceSettings.COMPATIBLE))
     }
 
+    @Test fun torrServerSnapshotExposesActualDownloadRateWithoutClaimingBufferDepth() {
+        val payload = """{"download_speed":2500000,"active_peers":7,"connected_seeders":3,
+            "preloaded_bytes":524288,"preload_size":1048576,"duration_seconds":7200}""".toByteArray()
+        val health = torrentTransferHealth(TorrentProbeResponse(200, null, payload), 54L * 1024 * 1024 * 1024)!!
+        assertEquals(20.0, health.downloadMbps!!, 0.001)
+        assertEquals(7, health.activePeers)
+        assertEquals(3, health.connectedSeeders)
+        assertEquals(50, health.preloadPercent)
+        assertTrue(health.requiredAverageMbps!! > 60)
+        assertTrue(health.safeSummary().contains("down_20.0Mbps"))
+    }
+
+    @Test fun incompleteOrMalformedTorrentStatsDoNotMarkPlaybackAsReady() {
+        assertNull(torrentTransferHealth(TorrentProbeResponse(200, null, "{invalid".toByteArray()), 100))
+        assertNull(torrentTransferHealth(TorrentProbeResponse(503, null,
+            """{"download_speed":50000}""".toByteArray()), 100))
+        assertNull(torrentTransferHealth(TorrentProbeResponse(200, null,
+            """{"file_stats":[]}""".toByteArray()), 100))
+    }
+
     @Test fun normalizesFlagsWithoutChangingSelectedFile() {
         val prepared = torrentPreparationUrl(url, true).toHttpUrl()
         assertEquals("/stream/selected.mkv", prepared.encodedPath)
