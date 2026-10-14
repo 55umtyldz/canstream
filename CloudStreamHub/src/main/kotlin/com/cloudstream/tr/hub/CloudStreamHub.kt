@@ -284,10 +284,10 @@ class CloudStreamHub : MainAPI() {
             val sortedLinks = com.cloudstream.tr.core.model.StreamPrioritySorter.sortByPriority(deterministicLinks)
             // Direct/CDN stream URLs often contain short-lived signatures.
             // Only torrent candidates are safe to reuse without re-resolving HTTP media.
-            com.cloudstream.tr.core.streaming.StreamCacheManager.put(cacheKey, cacheableHubLinks(sortedLinks))
+            HubTorrentCandidateCache.put(cacheKey, cacheableHubLinks(sortedLinks))
         }
 
-        val cachedLinks = com.cloudstream.tr.core.streaming.StreamCacheManager.get(cacheKey)?.let(::cacheableHubLinks)
+        val cachedLinks = HubTorrentCandidateCache.get(cacheKey)
         // Do not deliver cached magnets through collector.direct(): it drops torrents.
         // Publish cached candidates only after fresh resolution so they cannot occupy
         // the limited quality quotas before fresher 4K/REMUX links are considered.

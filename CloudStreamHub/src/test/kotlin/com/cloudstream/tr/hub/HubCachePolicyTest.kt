@@ -1,6 +1,5 @@
 package com.cloudstream.tr.hub
 
-import com.cloudstream.tr.core.streaming.StreamCacheManager
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import org.junit.Assert.*
@@ -13,16 +12,30 @@ class HubCachePolicyTest {
         quality = 1080, type = type
     )
 
+    @Test fun cacheExpiresAndEvictsOldKeysBeforeConsumingMemory() {
+        HubTorrentCandidateCache.clear()
+        val magnet = link("magnet:?xt=urn:btih:0000000000000000000000000000000000000001&index=0", ExtractorLinkType.MAGNET)
+        HubTorrentCandidateCache.put("old", listOf(magnet), now = 10L)
+        assertNotNull(HubTorrentCandidateCache.get("old", now = 10L))
+        assertNull(HubTorrentCandidateCache.get("old", now = HubTorrentCandidateCache.TTL_MS + 11L))
+        repeat(HubTorrentCandidateCache.MAX_KEYS + 5) {
+            HubTorrentCandidateCache.put("cache_" + it, listOf(magnet), now = 1000L)
+        }
+        assertTrue(HubTorrentCandidateCache.size() <= HubTorrentCandidateCache.MAX_KEYS)
+        assertNull(HubTorrentCandidateCache.get("cache_0", now = 1000L))
+        HubTorrentCandidateCache.clear()
+    }
+
     @Test fun hubCachesOnlyTorrentCandidates() {
         val key = "cache_policy_test"
         try {
             val direct = link("https://cdn.example/video.m3u8?token=expired", ExtractorLinkType.M3U8)
             val torrent = link("magnet:?xt=urn:btih:0000000000000000000000000000000000000001&index=0", ExtractorLinkType.MAGNET)
-            StreamCacheManager.put(key, listOf(direct, torrent).let(::cacheableHubLinks))
-            assertEquals(listOf(torrent), StreamCacheManager.get(key))
-            assertFalse(StreamCacheManager.get(key).orEmpty().any { it.url.contains("expired") })
+            HubTorrentCandidateCache.put(key, listOf(direct, torrent).let(::cacheableHubLinks))
+            assertEquals(listOf(torrent), HubTorrentCandidateCache.get(key))
+            assertFalse(HubTorrentCandidateCache.get(key).orEmpty().any { it.url.contains("expired") })
         } finally {
-            StreamCacheManager.clear()
+            HubTorrentCandidateCache.clear()
         }
     }
 }
