@@ -30,6 +30,12 @@ data class TorrentioStream(
     @param:JsonProperty("sources") val sources: List<String>? = null
 )
 
+data class TorrentioLookupEvidence(
+    val links: List<ExtractorLink>,
+    /** True only when Torrentio successfully returned an explicitly empty streams array. */
+    val authoritativeEmpty: Boolean = false
+)
+
 object TorrentioResolver {
     internal fun keepTopThreePerQuality(links: List<ExtractorLink>): List<ExtractorLink> {
         val qualityCounts = mutableMapOf<Int, Int>()
@@ -65,8 +71,12 @@ object TorrentioResolver {
 
     internal fun seedCount(title: String): Int = reportedSeeds(title) ?: 0
 
-    suspend fun resolve(imdbId: String, isMovie: Boolean, season: Int? = null, episode: Int? = null): List<ExtractorLink> {
-        if (!Regex("tt[0-9]+").matches(imdbId)) return emptyList()
+    suspend fun resolve(imdbId: String, isMovie: Boolean, season: Int? = null, episode: Int? = null): List<ExtractorLink> =
+        resolveWithEvidence(imdbId, isMovie, season, episode).links
+
+    /** Distinguish authoritative empty results from timeout, parse, and network failures. */
+    suspend fun resolveWithEvidence(imdbId: String, isMovie: Boolean, season: Int? = null, episode: Int? = null): TorrentioLookupEvidence {
+        if (!Regex("tt[0-9]+").matches(imdbId)) return TorrentioLookupEvidence(emptyList())
         val type = if (isMovie) "movie" else "series"
         val idPath = if (isMovie) imdbId else "$imdbId:$season:$episode"
         val options = "qualityfilter=scr,cam|sort=quality|limit=20"
@@ -77,9 +87,7 @@ object TorrentioResolver {
 
         try {
             val response = app.get(url, timeout = 10).parsedSafe<TorrentioResponse>()
-            val streams = response?.streams ?: return emptyList()
-
-            return mapStreams(streams, hasDebrid)
+            return parseStreamEvidence(response, hasDebrid)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -88,8 +96,13 @@ object TorrentioResolver {
                 category = DiagnosticCategory.NETWORK,
                 message = "Torrentio request failed (${e.javaClass.simpleName})"
             )
-            return emptyList()
+            return TorrentioLookupEvidence(emptyList())
         }
+    }
+
+    internal suspend fun parseStreamEvidence(response: TorrentioResponse?, hasDebrid: Boolean): TorrentioLookupEvidence {
+        val streams = response?.streams ?: return TorrentioLookupEvidence(emptyList())
+        return TorrentioLookupEvidence(mapStreams(streams, hasDebrid), authoritativeEmpty = streams.isEmpty())
     }
 
     internal suspend fun mapStreams(streams: List<TorrentioStream>, hasDebrid: Boolean): List<ExtractorLink> {
