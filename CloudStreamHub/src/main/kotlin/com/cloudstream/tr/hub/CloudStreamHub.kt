@@ -485,7 +485,10 @@ class CloudStreamHub : MainAPI() {
                                                         result.status == com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE) {
                                                         val tagged = ExtractorLink(
                                                             source = provider.name,
-                                                            name = ProviderModels.formatSourceTitle(provider.name, rawLink.name),
+                                                            name = ProviderModels.formatSourceTitle(
+                                                                sourceName = provider.name,
+                                                                resolution = rawLink.name
+                                                            ),
                                                             url = rawLink.url,
                                                             referer = rawLink.referer,
                                                             quality = rawLink.quality,
@@ -528,7 +531,7 @@ class CloudStreamHub : MainAPI() {
                                     DiagnosticLogger.log(
                                         provider = provider.name,
                                         stage = DiagnosticStage.STREAM_PREFLIGHT,
-                                        category = if (linksEmitted > 0) DiagnosticCategory.SOURCE_DISCOVERY else DiagnosticCategory.NETWORK,
+                                        category = if (linksEmitted.get() > 0) DiagnosticCategory.SOURCE_DISCOVERY else DiagnosticCategory.NETWORK,
                                         message = "Federation result: matched='${matched.name}', raw=$rawLinksReceived, providerEmitted=$linksEmitted (before hub dedupe and source-policy filtering), valid=$preflightValid, indeterminate=$preflightIndeterminate, invalid=$preflightInvalid, duplicates=$duplicatesDropped, dropped=$channelOverflowDropped. Preflight does not confirm sustained playback."
                                     )
                                 }
