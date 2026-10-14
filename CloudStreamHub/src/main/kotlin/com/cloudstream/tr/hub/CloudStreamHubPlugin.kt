@@ -3,6 +3,10 @@ package com.cloudstream.tr.hub
 import android.app.AlertDialog
 import android.content.Context
 import android.util.Log
+import android.widget.ArrayAdapter
+import android.widget.Button
+import android.widget.Spinner
+import android.media.MediaCodecList
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -19,6 +23,7 @@ class CloudStreamHubPlugin : Plugin() {
     override fun load(context: Context) {
         super.load(context)
         DebridConfig.initFromPreferences(context.applicationContext)
+        HubPerformanceSettings.load(context.applicationContext)
         openSettings = { settingsContext -> showHubSettings(settingsContext) }
         registerVideoClickAction(HubTorrentVlcAction())
         registerVideoClickAction(HubTorrentMxAction())
@@ -68,6 +73,44 @@ class CloudStreamHubPlugin : Plugin() {
             isChecked = DebridConfig.prioritizeDirectCdn
         }
 
+        val profileLabel = TextView(context).apply {
+            text = "Oynatma profili (seçim yalnız kaynak sıralamasını etkiler)"
+            setPadding(0, 22, 0, 0)
+        }
+        val profileValues = listOf(
+            HubPerformanceSettings.AUTO,
+            HubPerformanceSettings.COMPATIBLE,
+            HubPerformanceSettings.FEATURE
+        )
+        val profileSpinner = Spinner(context).apply {
+            adapter = ArrayAdapter(context, android.R.layout.simple_spinner_dropdown_item,
+                listOf("Otomatik", "Uyumluluk öncelikli", "4K / REMUX öncelikli"))
+            setSelection(profileValues.indexOf(HubPerformanceSettings.profile).coerceAtLeast(0))
+        }
+        val hardwareInfo = TextView(context).apply {
+            textSize = 12f
+            text = "Donanımsal HEVC: " + try {
+                if (MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.any { info ->
+                    !info.isEncoder && info.supportedTypes.any { type -> type.equals("video/hevc", true) }
+                }) "bildiriliyor (HDR / ses ayrı doğrulanmalı)" else "bildirilmiyor"
+            } catch (_: Exception) { "sorgulanamadı" }
+        }
+        val diagnosticsButton = Button(context).apply {
+            text = "Oynatma / kaynak tanılama kayıtlarını göster"
+            setOnClickListener {
+                AlertDialog.Builder(context)
+                    .setTitle("CloudStreamHub performans ölçümleri")
+                    .setMessage(HubPerformanceTelemetry.report())
+                    .setPositiveButton("Kapat", null)
+                    .setNeutralButton("Kayıtları temizle") { _, _ -> HubPerformanceTelemetry.clear() }
+                    .show()
+            }
+        }
+
+        layout.addView(profileLabel)
+        layout.addView(profileSpinner)
+        layout.addView(hardwareInfo)
+        layout.addView(diagnosticsButton)
         layout.addView(rdLabel)
         layout.addView(rdInput)
         layout.addView(torboxLabel)
@@ -91,6 +134,7 @@ class CloudStreamHubPlugin : Plugin() {
                     prioritizeCdn = cdnCheck.isChecked,
                     audioPref = DebridConfig.audioPreference
                 )
+                HubPerformanceSettings.save(context, profileValues[profileSpinner.selectedItemPosition])
                 Toast.makeText(context, "CloudStreamHub ayarları kaydedildi!", Toast.LENGTH_SHORT).show()
             }
             .setNegativeButton("İptal", null)
