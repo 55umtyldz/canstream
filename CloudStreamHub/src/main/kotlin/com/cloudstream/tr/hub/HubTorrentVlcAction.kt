@@ -44,12 +44,24 @@ class HubTorrentVlcAction : VlcPackage() {
 }
 
 internal suspend fun prepareTorrentForExternalPlayer(context: Context, url: String) {
+    val budget = torrentReadinessBudget(HubPerformanceSettings.profile)
     withContext(Dispatchers.Main) {
         android.widget.Toast.makeText(context,
-            "Torrent hazırlanıyor; başlangıç ve son parçalar bekleniyor (en fazla 90 saniye).",
+            "Torrent hazırlanıyor; başlangıç ve son parçalar bekleniyor (en fazla " +
+                (budget / 1000) + " saniye).",
             android.widget.Toast.LENGTH_LONG).show()
     }
-    awaitTorrentReadiness(url)
+    val started = System.nanoTime()
+    try {
+        awaitTorrentReadiness(url, budgetMs = budget)
+        HubPerformanceTelemetry.record("player_handoff", (System.nanoTime() - started) / 1_000_000)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        HubPerformanceTelemetry.record("player_handoff", (System.nanoTime() - started) / 1_000_000, "cancelled")
+        throw e
+    } catch (e: Exception) {
+        HubPerformanceTelemetry.record("player_handoff", (System.nanoTime() - started) / 1_000_000, e.javaClass.simpleName)
+        throw e
+    }
 }
 
 internal suspend fun requestTorrentConsent(context: Context): Boolean {

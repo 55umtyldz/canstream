@@ -18,6 +18,12 @@ class HubTorrentReadinessTest {
     private fun range(start: Long, end: Long, size: Long) =
         TorrentProbeResponse(206, "bytes $start-$end/$size", ByteArray((end - start + 1).toInt()))
 
+    @Test fun featureProfileHasLongerBoundedStartupBudget() {
+        assertEquals(90_000L, torrentReadinessBudget(HubPerformanceSettings.AUTO))
+        assertEquals(120_000L, torrentReadinessBudget(HubPerformanceSettings.FEATURE))
+        assertEquals(90_000L, torrentReadinessBudget(HubPerformanceSettings.COMPATIBLE))
+    }
+
     @Test fun normalizesFlagsWithoutChangingSelectedFile() {
         val prepared = torrentPreparationUrl(url, true).toHttpUrl()
         assertEquals("/stream/selected.mkv", prepared.encodedPath)
