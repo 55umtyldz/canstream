@@ -18,6 +18,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import java.util.concurrent.ConcurrentHashMap
@@ -294,7 +298,9 @@ class CloudStreamHub : MainAPI() {
         return coroutineScope {
             // Direct HTTP resolution and federation must not block the torrent pair or each other.
             val directJob = launch {
-                val completed = HubSourceBudget.run(HubSourceBudget.DIRECT_DISCOVERY_MS) {
+                val originStart = System.nanoTime()
+                val budget = HubAdaptiveTimeout.limit("direct", HubSourceBudget.DIRECT_DISCOVERY_MS)
+                val completed = HubSourceBudget.run(budget) {
                     try {
                         com.cloudstream.tr.core.resolvers.FourKhubResolver.resolve(
                             title = payload.title, year = payload.year, isMovie = payload.isMovie,
@@ -302,9 +308,12 @@ class CloudStreamHub : MainAPI() {
                         ).forEach(interceptedCallback)
                     } catch (e: CancellationException) { throw e } catch (_: Exception) {}
                 }
+                val elapsed = (System.nanoTime() - originStart) / 1_000_000
+                HubAdaptiveTimeout.observe("direct", elapsed, completed)
+                HubPerformanceTelemetry.record("direct_discovery", elapsed, if (completed) "ok" else "timeout")
                 if (!completed) DiagnosticLogger.log(
                     provider = name, stage = DiagnosticStage.LOAD, category = DiagnosticCategory.NETWORK,
-                    message = "Direct source discovery exceeded the 20-second limit."
+                    message = "Direct source discovery exceeded adaptive time budget."
                 )
             }
             val torrentJob = launch {
@@ -326,7 +335,8 @@ class CloudStreamHub : MainAPI() {
                     }
                     // Emit the first completed source immediately. A slower YTS/Torrentio
                     // request must not delay an already available 4K source.
-                    val completed = HubSourceBudget.run(HubSourceBudget.TORRENT_DISCOVERY_MS) {
+                    val discoveryBudget = HubAdaptiveTimeout.limit("torrent", HubSourceBudget.TORRENT_DISCOVERY_MS)
+                    val completed = HubSourceBudget.run(discoveryBudget) {
                     resolveHubSourcesProgressively(
                         resolvers = resolvers,
                         onBatch = { batch ->
@@ -348,9 +358,12 @@ class CloudStreamHub : MainAPI() {
                         }
                     )
                     }
+                    val elapsed = (System.nanoTime() - torrentDiscoveryStartedNs) / 1_000_000
+                    HubAdaptiveTimeout.observe("torrent", elapsed, completed)
+                    HubPerformanceTelemetry.record("torrent_discovery", elapsed, if (completed) "ok" else "timeout")
                     if (!completed) DiagnosticLogger.log(
                         provider = name, stage = DiagnosticStage.LOAD, category = DiagnosticCategory.NETWORK,
-                        message = "Torrent discovery exceeded the 20-second limit; completed source batches retained."
+                        message = "Torrent discovery exceeded adaptive time budget; completed batches retained."
                     )
                     // Reuse only candidates from origins that returned no fresh sources.
                     val fallback = HubTorrentSelector.cachedFallback(cachedLinks.orEmpty(), fresh.toList(), true)
@@ -418,72 +431,76 @@ class CloudStreamHub : MainAPI() {
                                 val rawLinksReceived = AtomicInteger(0)
                                 val standardCandidates = AtomicInteger(0)
                                 val featureCandidates = AtomicInteger(0)
-                                var duplicatesDropped = 0
-                                var channelOverflowDropped = 0
-                                var preflightValid = 0
-                                var preflightInvalid = 0
-                                var preflightIndeterminate = 0
-                                var linksEmitted = 0
+                                val duplicatesDropped = AtomicInteger(0)
+                                val channelOverflowDropped = AtomicInteger(0)
+                                val preflightValid = AtomicInteger(0)
+                                val preflightInvalid = AtomicInteger(0)
+                                val preflightIndeterminate = AtomicInteger(0)
+                                val linksEmitted = AtomicInteger(0)
 
                                 coroutineScope {
+                                    // The provider may return hundreds of links quickly.
+                                    // Limit HTTP verification to three in flight, preserve
+                                    // torrent candidates without unnecessary HTTP preflight.
+                                    val verifySlots = Semaphore(3)
                                     val consumerJob = launch {
+                                        val checks = mutableListOf<Job>()
                                         for (rawLink in channel) {
                                             currentCoroutineContext().ensureActive()
                                             val rawUrl = rawLink.url
-                                            if (rawUrl.isBlank() || rawUrl.contains("youtube.com") || rawUrl.contains("youtu.be")) {
-                                                continue
-                                            }
+                                            if (rawUrl.isBlank() || rawUrl.contains("youtube.com") || rawUrl.contains("youtu.be")) continue
                                             if (!seenUrls.add(rawUrl)) {
-                                                duplicatesDropped++
+                                                duplicatesDropped.incrementAndGet()
                                                 continue
                                             }
-
-                                            if (
-                                                rawUrl.startsWith("magnet:") ||
-                                                rawLink.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.MAGNET ||
-                                                rawLink.type == com.lagradost.cloudstream3.utils.ExtractorLinkType.TORRENT
-                                            ) {
+                                            if (HubTorrentSelector.isTorrent(rawLink)) {
                                                 emitLink(rawLink)
-                                                linksEmitted++
+                                                linksEmitted.incrementAndGet()
                                                 continue
                                             }
-
-                                            val reqHeaders = rawLink.headers.toMutableMap()
-                                            if (rawLink.referer.isNotBlank() && !reqHeaders.containsKey("Referer") && !reqHeaders.containsKey("referer")) {
-                                                reqHeaders["Referer"] = rawLink.referer
-                                            }
-
-                                            val preflight = StreamValidator.validateStream(
-                                                url = rawUrl,
-                                                headers = reqHeaders,
-                                                provider = provider.name
-                                            )
-                                            when (preflight.status) {
-                                                com.cloudstream.tr.core.network.ValidationStatus.VALID -> preflightValid++
-                                                com.cloudstream.tr.core.network.ValidationStatus.INVALID -> preflightInvalid++
-                                                com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE -> preflightIndeterminate++
-                                            }
-
-                                            if (preflight.isValid || preflight.status == com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE) {
-                                                val formattedName = ProviderModels.formatSourceTitle(
-                                                    sourceName = provider.name,
-                                                    resolution = rawLink.name
-                                                )
-                                                val taggedLink = ExtractorLink(
-                                                    source = provider.name,
-                                                    name = formattedName,
-                                                    url = rawLink.url,
-                                                    referer = rawLink.referer,
-                                                    quality = rawLink.quality,
-                                                    type = preflight.streamType,
-                                                    headers = reqHeaders,
-                                                    extractorData = rawLink.extractorData
-                                                )
-                                                currentCoroutineContext().ensureActive()
-                                                emitLink(taggedLink)
-                                                linksEmitted++
-                                            }
+                                            checks.add(launch {
+                                                verifySlots.withPermit {
+                                                    val reqHeaders = rawLink.headers.toMutableMap()
+                                                    if (rawLink.referer.isNotBlank() &&
+                                                        !reqHeaders.containsKey("Referer") &&
+                                                        !reqHeaders.containsKey("referer")) {
+                                                        reqHeaders["Referer"] = rawLink.referer
+                                                    }
+                                                    val started = System.nanoTime()
+                                                    val result = StreamValidator.validateStream(
+                                                        url = rawUrl,
+                                                        headers = reqHeaders,
+                                                        provider = provider.name
+                                                    )
+                                                    HubPerformanceTelemetry.record(
+                                                        "preflight", (System.nanoTime() - started) / 1_000_000,
+                                                        result.status.name
+                                                    )
+                                                    when (result.status) {
+                                                        com.cloudstream.tr.core.network.ValidationStatus.VALID -> preflightValid.incrementAndGet()
+                                                        com.cloudstream.tr.core.network.ValidationStatus.INVALID -> preflightInvalid.incrementAndGet()
+                                                        com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE -> preflightIndeterminate.incrementAndGet()
+                                                    }
+                                                    if (result.isValid ||
+                                                        result.status == com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE) {
+                                                        val tagged = ExtractorLink(
+                                                            source = provider.name,
+                                                            name = ProviderModels.formatSourceTitle(provider.name, rawLink.name),
+                                                            url = rawLink.url,
+                                                            referer = rawLink.referer,
+                                                            quality = rawLink.quality,
+                                                            type = result.streamType,
+                                                            headers = reqHeaders,
+                                                            extractorData = rawLink.extractorData
+                                                        )
+                                                        currentCoroutineContext().ensureActive()
+                                                        emitLink(tagged)
+                                                        linksEmitted.incrementAndGet()
+                                                    }
+                                                }
+                                            })
                                         }
+                                        checks.joinAll()
                                     }
 
                                     try {
@@ -495,9 +512,9 @@ class CloudStreamHub : MainAPI() {
                                                 rawLinksReceived.incrementAndGet()
                                                 if (HubCandidateBudget.admit(rawLink, standardCandidates, featureCandidates)) {
                                                     val result = channel.trySend(rawLink)
-                                                    if (!result.isSuccess) channelOverflowDropped++
+                                                    if (!result.isSuccess) channelOverflowDropped.incrementAndGet()
                                                 } else {
-                                                    channelOverflowDropped++
+                                                    channelOverflowDropped.incrementAndGet()
                                                 }
                                             }
                                         )
