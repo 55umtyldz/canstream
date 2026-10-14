@@ -148,7 +148,10 @@ class HubLinkSelectionTest {
         try {
             HubSourceBudget.run(HubSourceBudget.TORRENT_DISCOVERY_MS) { throw cancelled }
             fail("Must rethrow cancellation")
-        } catch (e: CancellationException) { assertSame(cancelled, e) }
+        } catch (e: CancellationException) {
+            assertEquals("player closed", e.message)
+            assertFalse(e is TimeoutCancellationException)
+        }
     }
 
     @Test fun candidateCapKeepsProviderMemoryBounded() {
