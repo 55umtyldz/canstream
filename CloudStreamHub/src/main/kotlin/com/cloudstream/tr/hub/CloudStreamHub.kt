@@ -277,10 +277,12 @@ class CloudStreamHub : MainAPI() {
                     .thenBy { it.url }
             )
             val sortedLinks = com.cloudstream.tr.core.model.StreamPrioritySorter.sortByPriority(deterministicLinks)
-            com.cloudstream.tr.core.streaming.StreamCacheManager.put(cacheKey, sortedLinks)
+            // Direct/CDN stream URLs often contain short-lived signatures.
+            // Only torrent candidates are safe to reuse without re-resolving HTTP media.
+            com.cloudstream.tr.core.streaming.StreamCacheManager.put(cacheKey, sortedLinks.filter(HubTorrentSelector::isTorrent))
         }
 
-        val cachedLinks = com.cloudstream.tr.core.streaming.StreamCacheManager.get(cacheKey)
+        val cachedLinks = com.cloudstream.tr.core.streaming.StreamCacheManager.get(cacheKey)?.filter(HubTorrentSelector::isTorrent)
         if (!cachedLinks.isNullOrEmpty()) {
             for (link in cachedLinks) {
                 collector.direct(link)

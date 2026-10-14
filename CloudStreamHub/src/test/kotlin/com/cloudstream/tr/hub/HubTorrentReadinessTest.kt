@@ -75,6 +75,23 @@ class HubTorrentReadinessTest {
         catch (_: ErrorLoadingException) { }
     }
 
+    @Test fun temporarilyIncompleteRangesAreRetriedUntilAvailable() = runBlocking {
+        var headReads = 0
+        awaitTorrentReadiness(url, TorrentReadinessTransport { _, requestedRange, _, _ ->
+            when (requestedRange) {
+                null -> TorrentProbeResponse(200, null, "{}".toByteArray())
+                "bytes=0-65535" -> {
+                    headReads++
+                    if (headReads == 1) TorrentProbeResponse(200, null, ByteArray(5))
+                    else range(0, 65535, 200_000)
+                }
+                "bytes=134464-199999" -> range(134464, 199999, 200_000)
+                else -> throw AssertionError(requestedRange)
+            }
+        }, budgetMs = 4_000, diagnostic = {})
+        assertEquals(2, headReads)
+    }
+
     @Test fun preparationTimeoutIsFriendlyAndDoesNotBecomeReady() = runBlocking {
         try {
             awaitTorrentReadiness(url, TorrentReadinessTransport { _, _, _, _ -> awaitCancellation() },

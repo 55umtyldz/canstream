@@ -132,6 +132,11 @@ internal suspend fun awaitTorrentReadiness(
             } catch (e: IOException) {
                 diagnostic("parçalar bekleniyor")
                 delay(1_000)
+            } catch (e: ErrorLoadingException) {
+                // Only data-range readiness failures are transient. Invalid URLs,
+                // preload rejection and caller cancellation must not be retried.
+                diagnostic("veri aralığı henüz hazır değil")
+                delay(1_000)
             } catch (e: CancellationException) {
                 throw e
             }

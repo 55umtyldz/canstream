@@ -18,6 +18,8 @@ import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 class CloudStreamHubPlugin : Plugin() {
     override fun load(context: Context) {
         super.load(context)
+        DebridConfig.initFromPreferences(context.applicationContext)
+        openSettings = { settingsContext -> showHubSettings(settingsContext) }
         registerVideoClickAction(HubTorrentVlcAction())
         registerVideoClickAction(HubTorrentMxAction())
     }
@@ -28,7 +30,7 @@ class CloudStreamHubPlugin : Plugin() {
         registerExtractorAPI(com.cloudstream.tr.animecix.TauVideo())
     }
 
-    fun openSettings(context: Context) {
+    private fun showHubSettings(context: Context) {
         DebridConfig.initFromPreferences(context)
 
         val layout = LinearLayout(context).apply {
