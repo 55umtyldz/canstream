@@ -16,7 +16,8 @@ A valid magnet, a Torrentio stream entry, successful HTTP 206 or passing unit te
 3. Keep different file indices of a multi-file torrent distinct during source selection (same info hash is not the same episode).
 4. Deliver Torrentio/YTS discoveries independently instead of awaiting both before emitting; failures of one source do not cancel valid other results. Emit elapsed milliseconds per batch for benchmarking.
 5. Bound aggregation to a 45-second total federation window, plus independent 20-second torrent/direct discovery ceilings; already-emitted links survive expiration. Cap provider callback queues at 128 candidates with a reserved high-quality 32-candidate lane, so late-arriving 2160p/REMUX results are not excluded solely because low-resolution links arrived first.
-6. Prevent caching resolved short-lived HTTP media URLs from Hub (torrent hash/link candidates only). Only emit cached torrents through the torrent policy **after** fresh sources, never through the direct-media collector (which deliberately rejects magnets).
+6. Reserve a fourth 2160p result position for a **different source origin**; at most three of the four 4K candidates may originate from the same source. This prevents a fast YTS response from excluding later Torrentio Blu-ray/REMUX alternatives.
+7. Prevent caching resolved short-lived HTTP media URLs from Hub (torrent hash/link candidates only). Only emit cached torrents through the torrent policy **after** fresh sources, never through the direct-media collector (which deliberately rejects magnets).
 
 ## Performance methodology
 Record p50 and p95 across repeated runs, for *each* host/version/content type, and include both cold and warm states:

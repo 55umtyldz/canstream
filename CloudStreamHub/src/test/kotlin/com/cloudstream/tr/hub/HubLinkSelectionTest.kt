@@ -39,6 +39,19 @@ class HubLinkSelectionTest {
         assertEquals(HubTorrentSelector.swarm(torrent(0)), HubTorrentSelector.swarm(base32))
     }
 
+    @Test fun late4kRemuxOriginGetsReservedSlotAfterYtsCandidates() {
+        val yts = (1..6).map { torrent(100 + it, "YTS", quality = 2160, seeds = 40) }
+        val early = HubTorrentSelector.select(yts)
+        assertEquals("Early origin must leave one 4K slot open", 3, early.size)
+        val lateRemux = torrent(150, "Torrentio", quality = 2160, seeds = 25)
+        val acceptedLate = HubTorrentSelector.select(listOf(lateRemux), early)
+        assertEquals(listOf(lateRemux), acceptedLate)
+        val afterFour = early + acceptedLate
+        assertTrue(HubTorrentSelector.select(listOf(torrent(151, "Other", quality = 2160)), afterFour).isEmpty())
+        // Ordinary 1080p quotas must remain at three alternatives.
+        assertEquals(3, HubTorrentSelector.select((1..6).map { torrent(300 + it, "YTS", quality = 1080) }).size)
+    }
+
     @Test fun differentEpisodesFromSameTorrentHaveIndependentIdentity() {
         val s1e1 = torrent(7, index = 1)
         val s1e2 = torrent(7, index = 2)
@@ -130,7 +143,7 @@ class HubLinkSelectionTest {
         assertEquals(20L, testScheduler.currentTime)
     }
 
-    @Test fun torrentSourceBudgetDoesNotSwallowCancellation() = kotlinx.coroutines.test.runTest {
+    @Test fun torrentSourceBudgetDoesNotSwallowCancellation() = kotlinx.coroutines.runBlocking {
         val cancelled = CancellationException("player closed")
         try {
             HubSourceBudget.run(HubSourceBudget.TORRENT_DISCOVERY_MS) { throw cancelled }

@@ -160,12 +160,26 @@ internal object HubTorrentSelector {
             sameSwarm.sortedWith(rank).firstOrNull { it.source.equals("YTS", true) && file(it) == file(best) } ?: best
         }
         for ((quality, group) in canonical.groupBy { it.quality }.toSortedMap()) {
-            val remaining = (3 - emitted.count { isTorrent(it) && it.quality == quality }).coerceAtLeast(0)
+            // A single fast origin must not occupy every 2160p slot before a
+            // later Blu-ray/REMUX source can be emitted by another origin.
+            val highResolution = quality >= 2160
+            val totalQuota = if (highResolution) 4 else 3
+            val originQuota = if (highResolution) 3 else 3
+            var remaining = (totalQuota - emitted.count { isTorrent(it) && it.quality == quality }).coerceAtLeast(0)
+            val originCounts = emitted.filter { isTorrent(it) && it.quality == quality }
+                .groupingBy { it.source.lowercase(Locale.ROOT) }.eachCount().toMutableMap()
             val sorted = group.filter { identity(it) !in usedFiles }.sortedWith(rank)
             val diverse = sorted.distinctBy { it.source.lowercase(Locale.ROOT) }
             val ordered = diverse + sorted.filter { it !in diverse }
-            for (link in ordered.take(remaining)) {
-                if (usedFiles.add(identity(link))) result.add(link)
+            for (link in ordered) {
+                if (remaining == 0) break
+                val origin = link.source.lowercase(Locale.ROOT)
+                if (originCounts.getOrDefault(origin, 0) >= originQuota) continue
+                if (usedFiles.add(identity(link))) {
+                    result.add(link)
+                    originCounts[origin] = originCounts.getOrDefault(origin, 0) + 1
+                    remaining--
+                }
             }
         }
         return result
