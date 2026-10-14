@@ -48,6 +48,23 @@ Implemented after the first performance baseline:
 - Late REMUX candidates can replace worse waiting 4K candidates without increasing the memory cap. Already delivered links are never silently retracted.
 - TorrServer metrics are parsed only from valid stat responses, redacted, and never promoted to proof of decoded playback.
 
+## Homepage and plugin appearance personalization (v35)
+
+- **Scope:** CloudStreamHub provider home page only. Ten predefined TMDB sections support independent show/hide and up/down ordering in the plugin settings. User settings are saved in Android SharedPreferences and loaded **before** registering the provider on startup.
+- **Network savings:** Disabled sections are removed from the provider's `mainPage` list and a stale/snapshotted home request for a hidden section returns an empty response without making a TMDB HTTP request.
+- **Host refresh:** CloudStream's `APIRepository` caches the provider's home-page list when it is constructed. A full CloudStream restart or refreshing/reselecting the provider may be necessary after saving to rebuild the host's list.
+- **Safe defaults:** All ten sections are enabled in their previous order on fresh installs. Unknown or duplicate persisted IDs are ignored/deduplicated, and at least one section always remains enabled.
+- **Appearance:** Light/Dark/System applies to **CloudStreamHub settings dialogs**, with six accent presets tinting the Hub's section headings and controls. The CloudStream application's global theme, player overlays and other providers are not changed: the CloudStream plugin SDK has no global-theme override.
+- **Security:** Theme and home preferences do not log debrid credentials or affect torrent access controls.
+
+### Manual acceptance
+1. Open plugin settings: confirm the new “Görünüm ve tema” and “Ana sayfa kişiselleştirme” controls appear.
+2. Disable **Popüler Filmler**, save, restart CloudStream, select CloudStreamHub home; verify the row is absent while **Popüler Diziler** remains.
+3. Re-enable Popüler Filmler, move it above Günün Trendleri, save and restart; verify row order is preserved.
+4. Disable nine sections and try disabling the tenth: at least one must remain enabled. Reset to the default configuration if needed.
+5. Select Koyu + Turkuaz and reopen settings; verify dialog/heading color change. The host app theme should remain unchanged.
+6. Restart again; confirm preferences persist. Confirm search, 1080p, 4K/HDR10+ and torrent settings still work.
+
 ## Profile behavior
 - AUTO: 90s preparation budget, 64KiB first-range probe, peer-health-led source ranking.
 - COMPATIBLE: AUTO-sized probe and a soft source-ranking penalty for demanding format labels. This is not a codec compatibility guarantee.
