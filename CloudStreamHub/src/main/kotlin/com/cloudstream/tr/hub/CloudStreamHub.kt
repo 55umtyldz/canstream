@@ -323,14 +323,34 @@ class CloudStreamHub : MainAPI() {
                     val torrentDiscoveryStartedNs = System.nanoTime()
                     val resolvers = mutableListOf<suspend () -> List<ExtractorLink>>(
                         {
-                            com.cloudstream.tr.core.resolvers.TorrentioResolver.resolve(
-                                imdbId, payload.isMovie, payload.season, payload.episode
-                            )
+                            val getLinks: suspend () -> List<ExtractorLink> = {
+                                com.cloudstream.tr.core.resolvers.TorrentioResolver.resolve(
+                                    imdbId, payload.isMovie, payload.season, payload.episode
+                                )
+                            }
+                            if (debridEnabled) getLinks()
+                            else HubSourceMemoRegistry.torrentio.resolve(
+                                listOf("torrentio", imdbId, payload.isMovie, payload.season,
+                                    payload.episode).joinToString(":")
+                            ) {
+                                val evidence = com.cloudstream.tr.core.resolvers.TorrentioResolver.resolveWithEvidence(
+                                    imdbId, payload.isMovie, payload.season, payload.episode
+                                )
+                                HubLookupOutcome(evidence.links, evidence.authoritativeEmpty)
+                            }
                         }
                     )
                     if (payload.isMovie && torrentSourcesEnabled) {
                         resolvers.add {
-                            com.cloudstream.tr.core.resolvers.YtsResolver.resolve(imdbId, true)
+                            if (debridEnabled) {
+                                com.cloudstream.tr.core.resolvers.YtsResolver.resolve(imdbId, true)
+                            } else {
+                                HubSourceMemoRegistry.yts.resolve("yts:" + imdbId) {
+                                    HubLookupOutcome(
+                                        com.cloudstream.tr.core.resolvers.YtsResolver.resolve(imdbId, true)
+                                    )
+                                }
+                            }
                         }
                     }
                     // Emit the first completed source immediately. A slower YTS/Torrentio
