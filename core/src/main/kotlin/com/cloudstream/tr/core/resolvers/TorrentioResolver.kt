@@ -69,7 +69,7 @@ object TorrentioResolver {
         if (!Regex("tt[0-9]+").matches(imdbId)) return emptyList()
         val type = if (isMovie) "movie" else "series"
         val idPath = if (isMovie) imdbId else "$imdbId:$season:$episode"
-        val options = "qualityfilter=scr,cam|sort=quality|limit=10"
+        val options = "qualityfilter=scr,cam|sort=quality|limit=20"
         val prefix = DebridConfig.getActiveDebridPrefix()?.let { "$it|" } ?: ""
         val fullOptions = "$prefix$options"
         val url = "https://torrentio.strem.fun/$fullOptions/stream/$type/$idPath.json"

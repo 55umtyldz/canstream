@@ -107,6 +107,18 @@ class TorrentResolversTest {
     }
 
     @Test
+    fun ytsUnknownSeedValuesAreNotDiscardedButKnownZeroIs() = runBlocking {
+        val movie = YtsMovie(imdbCode = "tt123", title = "Movie", torrents = listOf(
+            YtsTorrent(hash = hash, quality = "2160p", seeds = null),
+            YtsTorrent(hash = hash, quality = "720p", seeds = 0)
+        ))
+        val links = YtsResolver.mapResponse(YtsResponse("ok", YtsData(listOf(movie))), "tt123", false)
+        assertEquals(1, links.size)
+        assertEquals(2160, links.single().quality)
+        assertTrue(links.single().name.contains("seeds unknown"))
+    }
+
+    @Test
     fun ytsParsesApiFixtureWithAdditionalMetadata() = runBlocking {
         val response = YtsResolver.parseResponse("""
             {"status":"ok","status_message":"Query was successful","data":{

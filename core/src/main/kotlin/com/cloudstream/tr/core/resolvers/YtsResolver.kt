@@ -8,6 +8,9 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -62,21 +65,30 @@ object YtsResolver {
     suspend fun resolve(imdbId: String, isMovie: Boolean): List<ExtractorLink> {
         if (!isMovie || !Regex("tt[0-9]+").matches(imdbId)) return emptyList()
 
-        for (mirror in mirrors) {
-            try {
-                val targetUrl = "$mirror/api/v2/list_movies.json?query_term=$imdbId"
-                val response = parseResponse(app.get(targetUrl, timeout = 4).text)
-                val links = mapResponse(response, imdbId, DebridConfig.isDebridEnabled)
-                if (links.isNotEmpty()) return links
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                DiagnosticLogger.log(
-                    provider = "YTS", stage = DiagnosticStage.LOAD,
-                    category = DiagnosticCategory.NETWORK,
-                    message = "YTS API request failed (${e.javaClass.simpleName})", url = mirror
-                )
+        // Two-mirror waves avoid a sequence of seven 4-second timeouts.
+        // Each batch waits at most for its slowest mirror, not both sequentially.
+        for (wave in mirrors.chunked(2)) {
+            val responses = coroutineScope {
+                wave.map { mirror ->
+                    async {
+                        try {
+                            val targetUrl = mirror + "/api/v2/list_movies.json?query_term=" + imdbId
+                            val response = parseResponse(app.get(targetUrl, timeout = 4).text)
+                            mapResponse(response, imdbId, DebridConfig.isDebridEnabled)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            DiagnosticLogger.log(
+                                provider = "YTS", stage = DiagnosticStage.LOAD,
+                                category = DiagnosticCategory.NETWORK,
+                                message = "YTS mirror request failed (" + e.javaClass.simpleName + ")"
+                            )
+                            emptyList()
+                        }
+                    }
+                }.awaitAll()
             }
+            responses.firstOrNull { it.isNotEmpty() }?.let { return it }
         }
         return emptyList()
     }
@@ -108,11 +120,11 @@ object YtsResolver {
             val qStr = t.quality ?: "Unknown"
             val codecStr = t.videoCodec?.let { " $it" } ?: ""
             val sizeStr = t.size?.let { " [$it]" } ?: ""
-            val seedCount = t.seeds ?: 0
+            val seedCount = t.seeds
 
-            if (!hasDebrid && seedCount < 3) return@mapNotNull null
+            if (!hasDebrid && seedCount != null && seedCount < 3) return@mapNotNull null
 
-            val seedStr = " ($seedCount seeds)"
+            val seedStr = if (seedCount == null) " (seeds unknown)" else " ($seedCount seeds)"
             val displayName = "YTS $qStr$codecStr$sizeStr$seedStr".trim()
 
             val mappedQuality = TorrentioResolver.qualityOf(qStr)
