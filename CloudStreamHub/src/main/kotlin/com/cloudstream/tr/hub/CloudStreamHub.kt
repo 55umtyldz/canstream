@@ -55,7 +55,7 @@ class CloudStreamHub : MainAPI() {
         "Accept" to "application/json"
     )
 
-    override val mainPage = mainPageOf(
+    private val availableHomePages by lazy { mainPageOf(
         "${mainUrl}/trending/all/day?language=tr-TR&api_key=${tmdbApiKey}" to "Günün Trendleri",
         "${mainUrl}/movie/popular?language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Filmler",
         "${mainUrl}/tv/popular?language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Diziler",
@@ -66,9 +66,17 @@ class CloudStreamHub : MainAPI() {
         "${mainUrl}/discover/tv?with_genres=99&language=tr-TR&api_key=${tmdbApiKey}" to "Belgesel Dizileri",
         "${mainUrl}/discover/movie?with_genres=16&language=tr-TR&api_key=${tmdbApiKey}" to "Animasyon Filmleri",
         "${mainUrl}/discover/tv?with_genres=16&language=tr-TR&api_key=${tmdbApiKey}" to "Anime ve Animasyon"
-    )
+    ) }
+
+    // The CloudStream host may snapshot this list; reopening the app refreshes it.
+    override val mainPage: List<MainPageData>
+        get() = HubHomePreferences.filtered(availableHomePages)
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        // Even with a previously captured host tab, no hidden category should fetch TMDB.
+        if (!HubHomePreferences.isVisible(request.name)) {
+            return newHomePageResponse(request.name, emptyList(), hasNext = false)
+        }
         val targetUrl = "${request.data}&page=${page}"
         val resp = app.get(targetUrl, headers = authHeaders).parsedSafe<TmdbPageResponse>()
         val items = resp?.results?.mapNotNull { parseTmdbItem(it) } ?: emptyList()
