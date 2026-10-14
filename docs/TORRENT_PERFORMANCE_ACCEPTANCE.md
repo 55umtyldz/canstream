@@ -26,6 +26,28 @@ A valid magnet, a Torrentio stream entry, successful HTTP 206 or passing unit te
 6. Reserve a fourth 2160p result position for a **different source origin**; at most three of the four 4K candidates may originate from the same source. This prevents a fast YTS response from excluding later Torrentio Blu-ray/REMUX alternatives.
 7. Prevent caching resolved short-lived HTTP media URLs from Hub (torrent hash/link candidates only). Only emit cached torrents through the torrent policy **after** fresh sources, never through the direct-media collector (which deliberately rejects magnets).
 
+## Further P0/P1 performance package
+
+Implemented after the first performance baseline:
+- **Global HTTP budget:** at most six total concurrent stream preflight requests across all providers and concurrent Hub invocations, in addition to the existing per-provider concurrency limit of three.
+- **Top-K feature lane:** publish one 4K candidate early, reserve the remaining 31 feature slots for the best later candidates based on resolution, peer evidence and selected source profile; flush after each provider finishes. This staging may delay later 4K results until provider completion, so measure p95 first usable link.
+- **YTS first-success:** each two-mirror wave returns the first non-empty, valid movie/IMDb-matched result and cancels the slower sibling; no-success waves continue to other mirrors.
+- **Single-flight lookups:** concurrent non-debrid requests for the same Torrentio/YTS title join the same in-flight request. Cache only torrent/magnet candidates for 30 seconds, never a signed/direct URL. A *confirmed empty Torrentio streams array* is negatively cached for 10 seconds. Parsing/network errors, a failed mirror wave, seed-based exclusions or missing payload are **not** negatively cached. Debrid-specific responses bypass shared memoization.
+- **Read-only TorrServer network snapshot:** the existing `preload&stat` or stat-only response can report download speed (converted to Mbps), active peers, connected seeders, preload completion and estimated average video bitrate when duration metadata exists. Stats are optional. They do not report a decoder's rendered first frame, buffer time at the current seek position, or assured sustained throughput.
+
+### Remaining host-dependent integrations (not implemented)
+- Continuous TorrentServer piece availability, peer bandwidth sampling during active playback and seek-time piece reprioritization require a dedicated host-facing API integration or a verified host change. The current plugin only reads optional point-in-time transfer stats during readiness.
+- Native Media3 playback events (first frame, dropped frames, current buffer position, decoder errors) require hooks in CloudStream itself. VLC/MX external-player internals cannot be observed from a normal CloudStream extension action.
+- Do not claim a high-bitrate title plays successfully based on `preload`, `HTTP 206`, CI success, peer count or bitrate estimate. Actual 2160p REMUX with lossless audio and seeking remains a manual release gate.
+- A larger buffer, more peers, or host settings changes should be considered **only after** comparing TV cold-start, playback stalls and seek latency; some global TorrServer settings changes disrupt active torrents.
+
+### Regression gates
+- Global active preflight count never exceeds six across four simultaneous providers.
+- First YTS usable response wins without waiting for the slower mirror, and cancellation is preserved.
+- Two same-key lookups perform one outbound operation. Direct/CDN links, transient errors and filtered candidates cannot enter positive/negative cache.
+- Late REMUX candidates can replace worse waiting 4K candidates without increasing the memory cap. Already delivered links are never silently retracted.
+- TorrServer metrics are parsed only from valid stat responses, redacted, and never promoted to proof of decoded playback.
+
 ## Profile behavior
 - AUTO: 90s preparation budget, 64KiB first-range probe, peer-health-led source ranking.
 - COMPATIBLE: AUTO-sized probe and a soft source-ranking penalty for demanding format labels. This is not a codec compatibility guarantee.
