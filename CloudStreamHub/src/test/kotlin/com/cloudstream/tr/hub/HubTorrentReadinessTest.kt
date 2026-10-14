@@ -18,6 +18,11 @@ class HubTorrentReadinessTest {
     private fun range(start: Long, end: Long, size: Long) =
         TorrentProbeResponse(206, "bytes $start-$end/$size", ByteArray((end - start + 1).toInt()))
 
+    @Test fun featureProfileUsesBoundedWarmupRange() {
+        assertEquals(65_536, HubReadAheadPolicy.warmupProbeBytes(HubPerformanceSettings.AUTO))
+        assertEquals(262_144, HubReadAheadPolicy.warmupProbeBytes(HubPerformanceSettings.FEATURE))
+    }
+
     @Test fun featureProfileHasLongerBoundedStartupBudget() {
         assertEquals(90_000L, torrentReadinessBudget(HubPerformanceSettings.AUTO))
         assertEquals(120_000L, torrentReadinessBudget(HubPerformanceSettings.FEATURE))
@@ -61,6 +66,26 @@ class HubTorrentReadinessTest {
         }
         awaitTorrentReadiness(url, transport, diagnostic = {})
         assertEquals(listOf(null, "bytes=0-65535", "bytes=134464-199999"), calls)
+    }
+
+    @Test fun featureProfileProbesAtMost256KiBBeforeHandoff() = runBlocking {
+        val old = HubPerformanceSettings.profile
+        HubPerformanceSettings.profile = HubPerformanceSettings.FEATURE
+        try {
+            val requested = mutableListOf<String?>()
+            awaitTorrentReadiness(url, TorrentReadinessTransport { _, wanted, _, _ ->
+                requested.add(wanted)
+                when (wanted) {
+                    null -> TorrentProbeResponse(200, null, metadata(524_288))
+                    "bytes=0-262143" -> range(0, 262143, 524_288)
+                    "bytes=458752-524287" -> range(458752, 524287, 524_288)
+                    else -> throw AssertionError(wanted)
+                }
+            }, budgetMs = 4_000, diagnostic = {})
+            assertEquals(listOf(null, "bytes=0-262143", "bytes=458752-524287"), requested)
+        } finally {
+            HubPerformanceSettings.profile = old
+        }
     }
 
     @Test fun smallFilesAndWarmRetryUseActualBytes() = runBlocking {

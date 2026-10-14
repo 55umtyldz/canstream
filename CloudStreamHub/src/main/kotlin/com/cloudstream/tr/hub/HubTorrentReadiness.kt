@@ -210,18 +210,19 @@ internal suspend fun awaitTorrentReadiness(
 
         // File identity is mandatory, including when preload's initial request timed out.
         val expectedFileSize = selectedVideo.byteLength
+        val headBytes = HubReadAheadPolicy.warmupProbeBytes(HubPerformanceSettings.profile)
         diagnostic("seçilen video doğrulandı: .${selectedVideo.extension}, $expectedFileSize bayt")
         while (true) {
             currentCoroutineContext().ensureActive()
             try {
                 diagnostic("başlangıç verisi")
                 val headStart = System.nanoTime()
-                val head = transport.get(playUrl, "bytes=0-65535", 15_000L, 65_536)
+                val head = transport.get(playUrl, "bytes=0-" + (headBytes - 1), 15_000L, headBytes)
                 HubPerformanceTelemetry.record("torrent_head_range",
                     (System.nanoTime() - headStart) / 1_000_000, "HTTP_" + head.code)
                 diagnostic("başlangıç HTTP ${head.code}")
                 if (retryableTorrentStatus(head.code)) throw IOException("Torrent henüz veri sunamıyor")
-                val size = validateTorrentRange(head, 0, 65_535, expectedFileSize)
+                val size = validateTorrentRange(head, 0, headBytes - 1L, expectedFileSize)
                 diagnostic("son veri")
                 val start = maxOf(0, size - 65_536)
                 val tailStart = System.nanoTime()

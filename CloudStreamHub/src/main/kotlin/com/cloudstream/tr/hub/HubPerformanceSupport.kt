@@ -78,6 +78,10 @@ internal object HubAdaptiveTimeout {
 internal object HubReadAheadPolicy {
     const val MAX_BUFFER_BYTES = 12L * 1024 * 1024
 
+    /** Extra 192 KiB only when the user opts into feature-size release preparation. */
+    fun warmupProbeBytes(profile: String): Int =
+        if (profile == HubPerformanceSettings.FEATURE) 262_144 else 65_536
+
     fun averageMbps(fileBytes: Long, durationSeconds: Long): Double? =
         if (fileBytes <= 0 || durationSeconds <= 0) null
         else fileBytes.toDouble() * 8 / durationSeconds / 1_000_000
