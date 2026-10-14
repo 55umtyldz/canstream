@@ -9,8 +9,9 @@ import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
@@ -51,6 +52,29 @@ data class YtsTorrent(
     @param:JsonProperty("peers") val peers: Int? = null
 )
 
+/**
+ * Return first usable mirror response without waiting for its slower sibling.
+ * Each competing request must handle ordinary network errors itself.
+ */
+internal suspend fun <T> firstNonEmptyMirror(fetchers: List<suspend () -> List<T>>): List<T> =
+    coroutineScope {
+        if (fetchers.isEmpty()) return@coroutineScope emptyList()
+        val results = Channel<List<T>>(fetchers.size)
+        val jobs = fetchers.map { fetch ->
+            launch { results.send(fetch()) }
+        }
+        try {
+            repeat(fetchers.size) {
+                val candidate = results.receive()
+                if (candidate.isNotEmpty()) return@coroutineScope candidate
+            }
+            emptyList()
+        } finally {
+            jobs.forEach { it.cancel() }
+            results.close()
+        }
+    }
+
 object YtsResolver {
     private val mirrors = listOf(
         "https://yts.gg",
@@ -68,27 +92,25 @@ object YtsResolver {
         // Two-mirror waves avoid a sequence of seven 4-second timeouts.
         // Each batch waits at most for its slowest mirror, not both sequentially.
         for (wave in mirrors.chunked(2)) {
-            val responses = coroutineScope {
-                wave.map { mirror ->
-                    async {
-                        try {
-                            val targetUrl = mirror + "/api/v2/list_movies.json?query_term=" + imdbId
-                            val response = parseResponse(app.get(targetUrl, timeout = 4).text)
-                            mapResponse(response, imdbId, DebridConfig.isDebridEnabled)
-                        } catch (e: CancellationException) {
-                            throw e
-                        } catch (e: Exception) {
-                            DiagnosticLogger.log(
-                                provider = "YTS", stage = DiagnosticStage.LOAD,
-                                category = DiagnosticCategory.NETWORK,
-                                message = "YTS mirror request failed (" + e.javaClass.simpleName + ")"
-                            )
-                            emptyList()
-                        }
+            val first = firstNonEmptyMirror(wave.map { mirror ->
+                suspend {
+                    try {
+                        val targetUrl = mirror + "/api/v2/list_movies.json?query_term=" + imdbId
+                        val response = parseResponse(app.get(targetUrl, timeout = 4).text)
+                        mapResponse(response, imdbId, DebridConfig.isDebridEnabled)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        DiagnosticLogger.log(
+                            provider = "YTS", stage = DiagnosticStage.LOAD,
+                            category = DiagnosticCategory.NETWORK,
+                            message = "YTS mirror request failed (" + e.javaClass.simpleName + ")"
+                        )
+                        emptyList()
                     }
-                }.awaitAll()
-            }
-            responses.firstOrNull { it.isNotEmpty() }?.let { return it }
+                }
+            })
+            if (first.isNotEmpty()) return first
         }
         return emptyList()
     }
