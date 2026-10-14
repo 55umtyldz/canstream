@@ -16,6 +16,23 @@ class TorrentResolversTest {
         TorrentioStream(title = title, infoHash = hash, fileIdx = index)
 
     @Test
+    fun torrentioOnlyMarksExplicitEmptyResponsesAsAuthoritative() = runBlocking {
+        val empty = TorrentioResolver.parseStreamEvidence(TorrentioResponse(emptyList()), false)
+        assertTrue(empty.links.isEmpty())
+        assertTrue(empty.authoritativeEmpty)
+
+        val malformed = TorrentioResolver.parseStreamEvidence(TorrentioResponse(null), false)
+        assertTrue(malformed.links.isEmpty())
+        assertFalse(malformed.authoritativeEmpty)
+
+        val filtered = TorrentioResolver.parseStreamEvidence(
+            TorrentioResponse(listOf(stream(index = 2, title = "Movie 2160p (0 seeds)"))), false
+        )
+        assertTrue(filtered.links.isEmpty())
+        assertFalse("Filtered candidates are not authoritative empty", filtered.authoritativeEmpty)
+    }
+
+    @Test
     fun trackersPreserveUpstreamAndFallbacksWithoutDhtOrDuplicates() {
         val upstream = "https://tracker.example/announce?passkey=one&mode=two"
         val trackers = TorrentTrackers.magnetParams(listOf(
