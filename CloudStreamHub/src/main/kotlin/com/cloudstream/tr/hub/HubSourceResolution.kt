@@ -2,8 +2,8 @@ package com.cloudstream.tr.hub
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.joinAll
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 
 /**
  * Independent source discovery: a slow/failed origin must not gate ready sources.
@@ -15,7 +15,7 @@ internal suspend fun <T> resolveHubSourcesProgressively(
     onFailure: (Exception) -> Unit = {}
 ) = coroutineScope {
     resolvers.map { resolver ->
-        launch {
+        async {
             val batch = try {
                 resolver()
             } catch (e: CancellationException) {
@@ -26,5 +26,5 @@ internal suspend fun <T> resolveHubSourcesProgressively(
             }
             if (batch.isNotEmpty()) onBatch(batch)
         }
-    }.joinAll()
+    }.awaitAll()
 }

@@ -4,7 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.test.runTest
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -21,7 +21,7 @@ class HubSourceResolutionTest {
                 onBatch = { emitted.addAll(it) }
             )
         }
-        yield()
+        runCurrent()
         assertEquals(listOf("2160p-BluRay"), emitted)
         releaseSlow.complete(Unit)
         job.await()
