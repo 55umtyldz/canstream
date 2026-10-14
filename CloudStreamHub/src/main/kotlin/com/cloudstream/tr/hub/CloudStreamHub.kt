@@ -279,10 +279,10 @@ class CloudStreamHub : MainAPI() {
             val sortedLinks = com.cloudstream.tr.core.model.StreamPrioritySorter.sortByPriority(deterministicLinks)
             // Direct/CDN stream URLs often contain short-lived signatures.
             // Only torrent candidates are safe to reuse without re-resolving HTTP media.
-            com.cloudstream.tr.core.streaming.StreamCacheManager.put(cacheKey, sortedLinks.filter(HubTorrentSelector::isTorrent))
+            com.cloudstream.tr.core.streaming.StreamCacheManager.put(cacheKey, cacheableHubLinks(sortedLinks))
         }
 
-        val cachedLinks = com.cloudstream.tr.core.streaming.StreamCacheManager.get(cacheKey)?.filter(HubTorrentSelector::isTorrent)
+        val cachedLinks = com.cloudstream.tr.core.streaming.StreamCacheManager.get(cacheKey)?.let(::cacheableHubLinks)
         if (!cachedLinks.isNullOrEmpty()) {
             for (link in cachedLinks) {
                 collector.direct(link)
@@ -303,25 +303,42 @@ class CloudStreamHub : MainAPI() {
                 } catch (e: CancellationException) { throw e } catch (_: Exception) {}
             }
             val torrentJob = launch {
-                val fresh = if (payload.imdbId != null && (torrentSourcesEnabled || debridEnabled)) {
-                    listOf(
-                        async {
+                val imdbId = payload.imdbId
+                if (imdbId != null && (torrentSourcesEnabled || debridEnabled)) {
+                    val fresh = Collections.synchronizedList(mutableListOf<ExtractorLink>())
+                    val resolvers = mutableListOf<suspend () -> List<ExtractorLink>>(
+                        {
                             com.cloudstream.tr.core.resolvers.TorrentioResolver.resolve(
-                                payload.imdbId, payload.isMovie, payload.season, payload.episode
+                                imdbId, payload.isMovie, payload.season, payload.episode
                             )
-                        },
-                        async {
-                            if (payload.isMovie && torrentSourcesEnabled)
-                                com.cloudstream.tr.core.resolvers.YtsResolver.resolve(payload.imdbId, true)
-                            else emptyList()
                         }
-                    ).awaitAll().flatten()
-                } else emptyList()
-                fresh.filterNot(HubTorrentSelector::isTorrent).forEach(collector::direct)
-                val freshTorrents = fresh.filter(HubTorrentSelector::isTorrent)
-                // An origin with fresh torrents supersedes its cached torrent candidates.
-                val cachedFallback = HubTorrentSelector.cachedFallback(cachedLinks.orEmpty(), fresh, true)
-                collector.torrents(freshTorrents + cachedFallback)
+                    )
+                    if (payload.isMovie && torrentSourcesEnabled) {
+                        resolvers.add {
+                            com.cloudstream.tr.core.resolvers.YtsResolver.resolve(imdbId, true)
+                        }
+                    }
+                    // Emit the first completed source immediately. A slower YTS/Torrentio
+                    // request must not delay an already available 4K source.
+                    resolveHubSourcesProgressively(
+                        resolvers = resolvers,
+                        onBatch = { batch ->
+                            fresh.addAll(batch)
+                            batch.filterNot(HubTorrentSelector::isTorrent).forEach(collector::direct)
+                            collector.torrents(batch.filter(HubTorrentSelector::isTorrent))
+                        },
+                        onFailure = { failure ->
+                            DiagnosticLogger.log(
+                                provider = name, stage = DiagnosticStage.LOAD,
+                                category = DiagnosticCategory.NETWORK,
+                                message = "Torrent source failed (${failure.javaClass.simpleName})"
+                            )
+                        }
+                    )
+                    // Reuse only candidates from origins that returned no fresh sources.
+                    val fallback = HubTorrentSelector.cachedFallback(cachedLinks.orEmpty(), fresh.toList(), true)
+                    collector.torrents(fallback)
+                }
             }
 
             val discoveredProviders = CloudStreamProviderRegistryAdapter.getRegisteredProviders(excludeName = this@CloudStreamHub.name)

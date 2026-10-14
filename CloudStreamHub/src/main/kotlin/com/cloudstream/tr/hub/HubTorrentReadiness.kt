@@ -1,6 +1,8 @@
 package com.cloudstream.tr.hub
 
 import com.lagradost.cloudstream3.ErrorLoadingException
+import com.fasterxml.jackson.databind.ObjectMapper
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
@@ -82,6 +84,39 @@ internal fun torrentPreparationUrl(url: String, preload: Boolean): String {
     return builder.build().toString()
 }
 
+
+/**
+ * TorrServer's preload&stat response contains zero-based file_stats.
+ * Checking this before handing off to VLC/MX prevents accidentally playing
+ * a subtitle/sample/wrong file from a multi-file Blu-ray or episode torrent.
+ * File ID 0 is omitted by the server's json:"id,omitempty" contract.
+ */
+internal data class SelectedTorrentVideo(val index: Int, val byteLength: Long, val extension: String)
+
+internal fun selectedTorrentVideo(response: TorrentProbeResponse, index: Int): SelectedTorrentVideo {
+    if (response.code != 200) throw ErrorLoadingException("Torrent sunucusu dosya bilgisi döndürmedi (HTTP ${response.code}).")
+    val root = try {
+        ObjectMapper().readTree(response.bytes)
+    } catch (_: Exception) {
+        throw ErrorLoadingException("Torrent sunucusu geçerli dosya bilgisi döndürmedi.")
+    } ?: throw ErrorLoadingException("Torrent dosya bilgisi boş.")
+
+    val files = root.path("file_stats")
+    if (!files.isArray || files.size() == 0) {
+        throw ErrorLoadingException("Torrent dosya listesi alınamadı; dosya seçimi doğrulanamadı.")
+    }
+    val file = files.firstOrNull { it.path("id").asInt(0) == index }
+        ?: throw ErrorLoadingException("Seçilen torrent dosyası bulunamadı (index=$index).")
+    val length = file.path("length").asLong(0L)
+    val path = file.path("path").asText("")
+    val extension = path.substringAfterLast('.', "").lowercase(Locale.ROOT)
+    if (length <= 0L) throw ErrorLoadingException("Seçilen torrent dosyası boş veya geçersiz.")
+    if (extension !in setOf("mkv", "mp4", "m4v", "avi", "mov", "webm", "ts", "m2ts", "mpg", "mpeg")) {
+        throw ErrorLoadingException("Seçilen torrent dosyası video değil veya doğrudan oynatılamaz (.$extension).")
+    }
+    return SelectedTorrentVideo(index, length, extension)
+}
+
 internal fun validateTorrentRange(response: TorrentProbeResponse, start: Long, end: Long, total: Long? = null): Long {
     val match = Regex("bytes (\\d+)-(\\d+)/(\\d+)").matchEntire(response.range.orEmpty())
         ?: throw ErrorLoadingException("Torrent veri aralığı doğrulanamadı.")
@@ -103,14 +138,16 @@ internal suspend fun awaitTorrentReadiness(
 ) {
     val preloadUrl = torrentPreparationUrl(url, true)
     val playUrl = torrentPreparationUrl(url, false)
+    val selectedIndex = url.toHttpUrl().queryParameter("index")!!.toInt()
     val ready = withTimeoutOrNull(budgetMs) {
+        var expectedFileSize: Long? = null
         diagnostic("ön yükleme")
         try {
             val result = transport.get(preloadUrl, null, minOf(60_000, budgetMs), 1_048_576)
             diagnostic("ön yükleme HTTP ${result.code}")
-            if (result.code != 200 || result.bytes.firstOrNull()?.toInt() != '{'.code) {
-                throw ErrorLoadingException("Torrent sunucusu ön yüklemeyi kabul etmedi.")
-            }
+            val video = selectedTorrentVideo(result, selectedIndex)
+            expectedFileSize = video.byteLength
+            diagnostic("seçilen video doğrulandı: .${video.extension}, ${video.byteLength} bayt")
         } catch (e: IOException) {
             // A timed out client does not stop the host's synchronous preload. Verify real bytes.
             diagnostic("ön yükleme yanıtı beklenemedi; veri kontrolü")
@@ -121,11 +158,13 @@ internal suspend fun awaitTorrentReadiness(
                 diagnostic("başlangıç verisi")
                 val head = transport.get(playUrl, "bytes=0-65535", 15_000, 65_536)
                 diagnostic("başlangıç HTTP ${head.code}")
-                val size = validateTorrentRange(head, 0, 65_535)
+                if (head.code in setOf(408, 425, 429, 500, 502, 503, 504)) throw IOException("Torrent henüz veri sunamıyor")
+                val size = validateTorrentRange(head, 0, 65_535, expectedFileSize)
                 diagnostic("son veri")
                 val start = maxOf(0, size - 65_536)
                 val tail = transport.get(playUrl, "bytes=$start-${size - 1}", 15_000, 65_536)
                 diagnostic("son HTTP ${tail.code}")
+                if (tail.code in setOf(408, 425, 429, 500, 502, 503, 504)) throw IOException("Torrentin son parçaları henüz hazır değil")
                 validateTorrentRange(tail, start, size - 1, size)
                 diagnostic("hazır")
                 return@withTimeoutOrNull true
@@ -133,10 +172,9 @@ internal suspend fun awaitTorrentReadiness(
                 diagnostic("parçalar bekleniyor")
                 delay(1_000)
             } catch (e: ErrorLoadingException) {
-                // Only data-range readiness failures are transient. Invalid URLs,
-                // preload rejection and caller cancellation must not be retried.
-                diagnostic("veri aralığı henüz hazır değil")
-                delay(1_000)
+                // HTTP 401/403/404, range ignored (200), or mismatched selected
+                // file sizes are permanent handoff failures, not peer delays.
+                throw e
             } catch (e: CancellationException) {
                 throw e
             }

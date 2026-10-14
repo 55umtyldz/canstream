@@ -27,7 +27,9 @@ class HubTorrentTransportTest {
                             val headers = mutableListOf<String>()
                             while (true) { val line = reader.readLine() ?: break; if (line.isEmpty()) break; headers.add(line) }
                             requests.add(headers)
-                            val body = if (index == 0) "{}".toByteArray() else ByteArray(10) { 7 }
+                            val body = if (index == 0)
+                                """{"file_stats":[{"id":2,"path":"BDMV/STREAM/00001.m2ts","length":10}]}""".toByteArray()
+                            else ByteArray(10) { 7 }
                             val response = if (index == 0) "200 OK" else "206 Partial Content"
                             val range = if (index == 0) "" else "Content-Range: bytes 0-9/10\r\n"
                             socket.getOutputStream().write(("HTTP/1.1 $response\r\n${range}Content-Length: ${body.size}\r\nConnection: close\r\n\r\n").toByteArray())

@@ -18,7 +18,7 @@ class HubCachePolicyTest {
         try {
             val direct = link("https://cdn.example/video.m3u8?token=expired", ExtractorLinkType.M3U8)
             val torrent = link("magnet:?xt=urn:btih:0000000000000000000000000000000000000001&index=0", ExtractorLinkType.MAGNET)
-            StreamCacheManager.put(key, listOf(direct, torrent).filter(HubTorrentSelector::isTorrent))
+            StreamCacheManager.put(key, listOf(direct, torrent).let(::cacheableHubLinks))
             assertEquals(listOf(torrent), StreamCacheManager.get(key))
             assertFalse(StreamCacheManager.get(key).orEmpty().any { it.url.contains("expired") })
         } finally {

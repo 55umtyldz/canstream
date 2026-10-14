@@ -33,10 +33,21 @@ class HubLinkSelectionTest {
         val yts = torrent(1, "YTS", seeds = 0, tracker = "b")
         assertEquals(listOf(yts), HubTorrentSelector.select(listOf(torrentio, yts)))
         val otherFile = torrent(1, "YTS", seeds = 0, index = 2)
-        assertEquals(listOf(torrentio), HubTorrentSelector.select(listOf(torrentio, otherFile)))
+        assertEquals(listOf(torrentio, otherFile), HubTorrentSelector.select(listOf(torrentio, otherFile)))
         val base32 = ExtractorLink(source = "YTS", name = "YTS", url = "magnet:?xt=urn:btih:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             referer = "", quality = 1080, type = ExtractorLinkType.MAGNET)
         assertEquals(HubTorrentSelector.swarm(torrent(0)), HubTorrentSelector.swarm(base32))
+    }
+
+    @Test fun differentEpisodesFromSameTorrentHaveIndependentIdentity() {
+        val s1e1 = torrent(7, index = 1)
+        val s1e2 = torrent(7, index = 2)
+        val s1e1Duplicate = torrent(7, index = 1, tracker = "other")
+        val selected = HubTorrentSelector.select(listOf(s1e1, s1e2, s1e1Duplicate))
+        assertEquals(2, selected.size)
+        assertTrue(selected.any { it.url.contains("index=1") })
+        assertTrue(selected.any { it.url.contains("index=2") })
+        assertEquals(listOf(s1e2), HubTorrentSelector.select(listOf(s1e2), listOf(s1e1)))
     }
 
     @Test fun callbacksAreImmediateForEveryHttpLinkAndTorrentQuotaSpansBatches() {

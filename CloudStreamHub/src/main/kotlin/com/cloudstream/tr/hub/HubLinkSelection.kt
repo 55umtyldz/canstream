@@ -54,6 +54,9 @@ internal object HubContentRouting {
     }
 }
 
+internal fun cacheableHubLinks(links: List<ExtractorLink>): List<ExtractorLink> =
+    links.filter(HubTorrentSelector::isTorrent)
+
 internal object HubTorrentSelector {
     fun cachedFallback(cached: List<ExtractorLink>, fresh: List<ExtractorLink>, directOrigins: Boolean): List<ExtractorLink> {
         val freshOrigins = fresh.map { it.source.lowercase(Locale.ROOT) }.toSet()
@@ -97,6 +100,7 @@ internal object HubTorrentSelector {
     }
 
     private fun file(link: ExtractorLink): String? = params(link)["index"]
+    private fun identity(link: ExtractorLink): String = swarm(link) + ":" + (file(link) ?: "unknown")
     private fun seeds(link: ExtractorLink): Int = Regex("(\\d+)\\s+seeds", RegexOption.IGNORE_CASE)
         .find(link.name)?.groupValues?.get(1)?.toIntOrNull() ?: 0
     private val rank = compareByDescending<ExtractorLink> { seeds(it) }
@@ -104,20 +108,20 @@ internal object HubTorrentSelector {
         .thenBy { file(it).orEmpty() }.thenBy { it.url }
 
     fun select(candidates: List<ExtractorLink>, emitted: List<ExtractorLink> = emptyList()): List<ExtractorLink> {
-        val usedSwarms = emitted.filter(::isTorrent).map(::swarm).toMutableSet()
+        val usedFiles = emitted.filter(::isTorrent).map(::identity).toMutableSet()
         val result = mutableListOf<ExtractorLink>()
-        val canonical = candidates.filter(::isTorrent).groupBy(::swarm).values.map { sameSwarm ->
+        val canonical = candidates.filter(::isTorrent).groupBy(::identity).values.map { sameSwarm ->
             val best = sameSwarm.sortedWith(rank).first()
             // Prefer YTS only when its file selection has exactly the same semantics.
             sameSwarm.sortedWith(rank).firstOrNull { it.source.equals("YTS", true) && file(it) == file(best) } ?: best
         }
         for ((quality, group) in canonical.groupBy { it.quality }.toSortedMap()) {
             val remaining = (3 - emitted.count { isTorrent(it) && it.quality == quality }).coerceAtLeast(0)
-            val sorted = group.filter { swarm(it) !in usedSwarms }.sortedWith(rank)
+            val sorted = group.filter { identity(it) !in usedFiles }.sortedWith(rank)
             val diverse = sorted.distinctBy { it.source.lowercase(Locale.ROOT) }
             val ordered = diverse + sorted.filter { it !in diverse }
             for (link in ordered.take(remaining)) {
-                if (usedSwarms.add(swarm(link))) result.add(link)
+                if (usedFiles.add(identity(link))) result.add(link)
             }
         }
         return result

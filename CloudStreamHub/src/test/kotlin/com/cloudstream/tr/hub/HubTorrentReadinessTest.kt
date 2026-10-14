@@ -12,6 +12,9 @@ import java.io.IOException
 
 class HubTorrentReadinessTest {
     private val url = "http://127.0.0.1:8090/stream/selected.mkv?link=abc&index=2&play&preload&stat"
+    private fun metadata(size: Long = 200_000L) =
+        """{"file_stats":[{"id":0,"path":"sample.txt","length":100},{"id":2,"path":"Feature.Remux.2160p.mkv","length":$size}]}""".toByteArray()
+
     private fun range(start: Long, end: Long, size: Long) =
         TorrentProbeResponse(206, "bytes $start-$end/$size", ByteArray((end - start + 1).toInt()))
 
@@ -41,7 +44,7 @@ class HubTorrentReadinessTest {
             calls.add(requestedRange)
             assertEquals("2", request.toHttpUrl().queryParameter("index"))
             when (requestedRange) {
-                null -> TorrentProbeResponse(200, null, "{}".toByteArray())
+                null -> TorrentProbeResponse(200, null, metadata())
                 "bytes=0-65535" -> range(0, 65535, 200_000)
                 "bytes=134464-199999" -> range(134464, 199999, 200_000)
                 else -> throw AssertionError(requestedRange)
@@ -79,10 +82,10 @@ class HubTorrentReadinessTest {
         var headReads = 0
         awaitTorrentReadiness(url, TorrentReadinessTransport { _, requestedRange, _, _ ->
             when (requestedRange) {
-                null -> TorrentProbeResponse(200, null, "{}".toByteArray())
+                null -> TorrentProbeResponse(200, null, metadata())
                 "bytes=0-65535" -> {
                     headReads++
-                    if (headReads == 1) TorrentProbeResponse(200, null, ByteArray(5))
+                    if (headReads == 1) TorrentProbeResponse(503, null, ByteArray(5))
                     else range(0, 65535, 200_000)
                 }
                 "bytes=134464-199999" -> range(134464, 199999, 200_000)
@@ -90,6 +93,65 @@ class HubTorrentReadinessTest {
             }
         }, budgetMs = 4_000, diagnostic = {})
         assertEquals(2, headReads)
+    }
+
+    @Test fun torrentStatusSelectsCorrectLargeBluRayFileAndIndexZeroIsAllowed() {
+        val result = TorrentProbeResponse(200, null, metadata(8L * 1024 * 1024 * 1024))
+        val selected = selectedTorrentVideo(result, 2)
+        assertEquals(2, selected.index)
+        assertEquals(8L * 1024 * 1024 * 1024, selected.byteLength)
+        assertEquals("mkv", selected.extension)
+    }
+
+    @Test fun rejectsMissingAndNonVideoSelectionsWithoutHandoff() {
+        for ((body, index) in listOf(
+            metadata() to 19,
+            metadata() to 0,
+            """{"file_stats":[]}""".toByteArray() to 2,
+            """{"file_stats":[{"id":2,"path":"Feature.iso","length":100}]}""".toByteArray() to 2,
+            """{"file_stats":[{"id":2,"path":"Feature.m2ts","length":0}]}""".toByteArray() to 2
+        )) {
+            try {
+                selectedTorrentVideo(TorrentProbeResponse(200, null, body), index)
+                fail("Expected bad file rejection")
+            } catch (_: ErrorLoadingException) { }
+        }
+    }
+
+    @Test fun supportsBluRayTransportStreamButRejectsMismatchedRangeLength() {
+        val video = selectedTorrentVideo(TorrentProbeResponse(200, null,
+            """{"file_stats":[{"id":2,"path":"BDMV/STREAM/00001.m2ts","length":5242880}]}""".toByteArray()), 2)
+        assertEquals("m2ts", video.extension)
+        try {
+            validateTorrentRange(range(0, 65535, 200_000), 0, 65535, video.byteLength)
+            fail("Must reject wrong selected file")
+        } catch (_: ErrorLoadingException) { }
+    }
+
+    @Test fun missingSelectedFileFailsBeforeRangeRequests() = runBlocking {
+        var calls = 0
+        try {
+            awaitTorrentReadiness(url, TorrentReadinessTransport { _, range, _, _ ->
+                calls++
+                assertNull("Should reject at preload metadata stage", range)
+                TorrentProbeResponse(200, null, """{"file_stats":[{"id":1,"path":"wrong.mkv","length":90000}]}""".toByteArray())
+            }, budgetMs = 3000, diagnostic = {})
+            fail("Selected index must exist")
+        } catch (_: ErrorLoadingException) { assertEquals(1, calls) }
+    }
+
+    @Test fun permanentRangeProtocolErrorsFailFast() = runBlocking {
+        var probes = 0
+        try {
+            awaitTorrentReadiness(url, TorrentReadinessTransport { _, range, _, _ ->
+                if (range == null) TorrentProbeResponse(200, null, metadata())
+                else {
+                    probes++
+                    TorrentProbeResponse(200, null, ByteArray(10))
+                }
+            }, budgetMs = 3000, diagnostic = {})
+            fail("Range ignored by server")
+        } catch (_: ErrorLoadingException) { assertEquals(1, probes) }
     }
 
     @Test fun preparationTimeoutIsFriendlyAndDoesNotBecomeReady() = runBlocking {
