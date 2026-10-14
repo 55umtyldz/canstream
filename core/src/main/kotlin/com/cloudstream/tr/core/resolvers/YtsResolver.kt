@@ -59,13 +59,22 @@ data class YtsTorrent(
 internal suspend fun <T> firstNonEmptyMirror(fetchers: List<suspend () -> List<T>>): List<T> =
     coroutineScope {
         if (fetchers.isEmpty()) return@coroutineScope emptyList()
-        val results = Channel<List<T>>(fetchers.size)
+        val results = Channel<Result<List<T>>>(fetchers.size)
         val jobs = fetchers.map { fetch ->
-            launch { results.send(fetch()) }
+            launch {
+                try {
+                    results.send(Result.success(fetch()))
+                } catch (error: Throwable) {
+                    // A child CancellationException does not cancel coroutineScope,
+                    // so report it explicitly instead of blocking receive() forever.
+                    results.trySend(Result.failure(error))
+                    throw error
+                }
+            }
         }
         try {
             repeat(fetchers.size) {
-                val candidate = results.receive()
+                val candidate = results.receive().getOrThrow()
                 if (candidate.isNotEmpty()) return@coroutineScope candidate
             }
             emptyList()
