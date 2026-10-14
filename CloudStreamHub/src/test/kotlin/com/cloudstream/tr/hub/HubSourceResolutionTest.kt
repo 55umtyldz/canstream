@@ -31,7 +31,7 @@ class HubSourceResolutionTest {
     @Test fun failedSourceDoesNotSuppressHealthyOrigin() = runTest {
         val emitted = mutableListOf<String>()
         val errors = mutableListOf<String>()
-        resolveHubSourcesProgressively(
+        resolveHubSourcesProgressively<String>(
             resolvers = listOf(
                 { throw IllegalStateException("origin unavailable") },
                 { listOf("2160p") }
