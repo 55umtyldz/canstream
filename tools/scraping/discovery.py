@@ -325,6 +325,12 @@ def evaluate_player_discovery(html_body: str, base_url: str) -> Tuple[str, Dict[
         any(host in body_without_scx.lower() for host in ["vidpapi", "closeload", "rapidrame", "streamtape", "doodstream", "vidsrc", "superembed"]) or
         re.search(r'(?:file|source)\s*:\s*["\']https?://[^"\']+\.(?:m3u8|mp4)', body_without_scx, re.IGNORECASE)
     )
+    # Star TV mounts its public Dyg player after hydration. A container alone
+    # or an SDK preload alone does not establish player discovery.
+    if soup.select_one("#dyg-player") and soup.select_one(
+        'link[rel="preload"][as="script"][href="https://player-assets.dygdigital.com/prod/js/bundle.js"]'
+    ) and re.search(r'"referenceId"\s*:\s*"[a-f0-9]{24}"', body_str.replace('\\"', '"')):
+        has_player_code = True
     info["hasPlayerScript"] = has_player_code
 
     import base64

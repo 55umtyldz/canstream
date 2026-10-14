@@ -1,4 +1,4 @@
-version = 29
+version = 32
 
 dependencies {
     // Official host SDK: compile-only; host player/action classes stay in CloudStream.
@@ -21,6 +21,8 @@ val bundledProviderModules = listOf(
     "HDFilmCehennemi",
     "SinemaCX",
     "SezonlukDizi",
+    "StarTV",
+    "DiziIzle",
     "KultFilmler",
     "Dizilla",
     "DiziYou",

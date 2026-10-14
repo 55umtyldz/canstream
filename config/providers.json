@@ -1532,6 +1532,92 @@
       "disabledReason": "DISABLED_DEAD: Domain connection timed out."
     },
     {
+      "name": "StarTV",
+      "module": "StarTV",
+      "enabled": true,
+      "language": "tr",
+      "types": [
+        "TvSeries"
+      ],
+      "domainKey": "StarTV",
+      "healthTier": "full",
+      "smokeTest": {
+        "searchQuery": "Tuzlu Kahve",
+        "knownDetail": "https://www.startv.com.tr/dizi/tuzlu-kahve",
+        "expectedType": "TvSeries"
+      },
+      "monitoring": {
+        "preferredFetch": "HTTP",
+        "dynamicFallback": false,
+        "stealthFallback": false,
+        "contentType": "TvSeries",
+        "playerProbe": {
+          "mode": "episode",
+          "episodeSelector": "a[href*='/bolumler/']"
+        },
+        "search": {
+          "method": "GET",
+          "path": "/dizi",
+          "expectedSelector": "a[href='/dizi/tuzlu-kahve'] img"
+        },
+        "homepage": {
+          "path": "/dizi",
+          "selectors": [
+            "a[href^='/dizi/']"
+          ],
+          "requiredUrlPatterns": [
+            "/dizi/"
+          ],
+          "excludedUrlPatterns": [
+            "/bolumler",
+            "/sahneler",
+            "/fragmanlar"
+          ]
+        }
+      }
+    },
+    {
+      "name": "DiziIzle",
+      "module": "DiziIzle",
+      "enabled": true,
+      "language": "tr",
+      "types": [
+        "TvSeries"
+      ],
+      "domainKey": "DiziIzle",
+      "healthTier": "full",
+      "smokeTest": {
+        "searchQuery": "Tuzlu Kahve",
+        "knownDetail": "https://www.diziizle.you/tuzlu-kahve/",
+        "expectedType": "TvSeries"
+      },
+      "monitoring": {
+        "preferredFetch": "HTTP",
+        "dynamicFallback": false,
+        "stealthFallback": false,
+        "contentType": "TvSeries",
+        "playerProbe": {
+          "mode": "episode",
+          "episodeSelector": "ol.bl-liste > li.bl-satir:not(:has(.bl-etiket-fragman)) > a[href]"
+        },
+        "search": {
+          "method": "GET",
+          "path": "/?ara={query}",
+          "expectedSelector": "li.film-dizi .ad a[href]"
+        },
+        "homepage": {
+          "selectors": [
+            "#content .right ul a[title$=' izle']"
+          ],
+          "excludedUrlPatterns": [
+            "/bolum-",
+            "/player/",
+            "/nostaljik-diziler/"
+          ]
+        }
+      }
+    },
+    {
       "name": "YTS",
       "module": "YTS",
       "enabled": true,

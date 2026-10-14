@@ -33,6 +33,31 @@ class HubTorrentVlcActionTest {
         assertSame(output, result)
     }
 
+    @Test fun readinessRunsAfterLocalValidationAndBeforeReturningLink() = runBlocking {
+        val order = mutableListOf<String>()
+        val output = link("http://127.0.0.1:44075/stream/a?link=hash&index=2&play", ExtractorLinkType.VIDEO)
+        val result = prepareTorrentStream(listOf(link("magnet:?xt=example", ExtractorLinkType.MAGNET)), 0,
+            consent = { order.add("consent"); true },
+            readiness = { assertSame(output, it); order.add("ready") },
+            transform = { order.add("transform"); output })
+        order.add("handoff")
+        assertSame(output, result)
+        assertEquals(listOf("consent", "transform", "ready", "handoff"), order)
+    }
+
+    @Test fun remoteTransformAndPreparationFailurePreventHandoff() = runBlocking {
+        for (remote in listOf(true, false)) {
+            var prepared = false
+            try {
+                prepareTorrentStream(listOf(link("magnet:?xt=example", ExtractorLinkType.MAGNET)), 0,
+                    consent = { true }, readiness = { prepared = true; throw ErrorLoadingException("Not ready") },
+                    transform = { link(if (remote) "https://example.com/video" else
+                        "http://127.0.0.1:44075/stream/a", ExtractorLinkType.VIDEO) })
+                fail("Must not hand off")
+            } catch (_: ErrorLoadingException) { assertEquals(!remote, prepared) }
+        }
+    }
+
     @Test fun rejectsUnselectedNonTorrentAndDeniedConsentBeforeStartingServer() = runBlocking {
         val torrent = link("magnet:?xt=example", ExtractorLinkType.MAGNET)
         for ((links, index, allowed) in listOf(

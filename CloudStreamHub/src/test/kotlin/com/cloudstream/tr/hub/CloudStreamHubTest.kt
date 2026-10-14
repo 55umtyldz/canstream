@@ -26,6 +26,28 @@ class CloudStreamHubTest {
     private val hub = CloudStreamHub()
 
     @Test
+    fun testTurkishSeriesDiscoveryUsesOriginCountryAndTvDetails() {
+        val row = hub.mainPage.single { it.name == "Türk Dizileri" }
+        val request = java.net.URI(row.data)
+        val parameters = request.rawQuery.split("&").associate {
+            val parts = it.split("=", limit = 2)
+            parts[0] to parts.getOrElse(1) { "" }
+        }
+
+        assertEquals("/3/discover/tv", request.path)
+        assertEquals("TR", parameters["with_origin_country"])
+        assertEquals("tr-TR", parameters["language"])
+        assertEquals("popularity.desc", parameters["sort_by"])
+
+        // Discover responses omit media_type; the series name must select TV details.
+        val result = hub.parseTmdbItem(TmdbItem(id = 123, name = "Türk Dizisi"))
+
+        assertTrue(result is TvSeriesSearchResponse)
+        assertEquals(TvType.TvSeries, result?.type)
+        assertEquals("/3/tv/123", result?.url?.let { java.net.URI(it).path })
+    }
+
+    @Test
     fun testTorrentioKeepsAtMostThreeLinksPerQuality() {
         val qualities = listOf(
             Qualities.P2160.value,
@@ -65,6 +87,8 @@ class CloudStreamHubTest {
             "HDFilmCehennemi",
             "SinemaCX",
             "SezonlukDizi",
+            "StarTV",
+            "DiziIzle",
             "KultFilmler",
             "Dizilla",
             "DiziYou",

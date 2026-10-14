@@ -6,6 +6,22 @@ from tools.scraping.discovery import (
     classify_subtitles
 )
 
+
+@pytest.mark.parametrize("missing", [None, "container", "sdk", "reference"])
+def test_dyg_player_requires_container_sdk_and_reference(missing):
+    parts = {
+        "container": '<div id="dyg-player"></div>',
+        "sdk": '<link rel="preload" as="script" href="https://player-assets.dygdigital.com/prod/js/bundle.js">',
+        "reference": r'<script>self.__next_f.push([1,"{\"referenceId\":\"6a97c234a46e38b3a3925061\"}"])</script>',
+    }
+    html = "".join(value for key, value in parts.items() if key != missing)
+
+    status, info = evaluate_player_discovery(html, "https://www.startv.com.tr/dizi/test/bolumler/1-bolum")
+
+    assert status == ("PLAYER_DISCOVERED" if missing is None else "PLAYER_NOT_FOUND")
+    assert info["hasPlayerScript"] is (missing is None)
+    assert info["mediaUrls"] == []
+
 def test_discover_homepage_cards_strict():
     html_with_cards = """
     <div class="movies">

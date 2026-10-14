@@ -34,12 +34,22 @@ class HubTorrentVlcAction : VlcPackage() {
     ) {
         val converted = prepareTorrentStream(result.links, index,
             consent = { requestTorrentConsent(context) },
+            readiness = { prepareTorrentForExternalPlayer(context, it.url) },
             transform = { Torrent.transformLink(it).first })
         // Explicit constructor avoids Kotlin copy/default-argument ABI differences.
         val convertedResult = LinkLoadingResult(listOf(converted), result.subs, result.syncData)
         super.putExtra(context, intent, video, convertedResult, 0)
     }
 
+}
+
+internal suspend fun prepareTorrentForExternalPlayer(context: Context, url: String) {
+    withContext(Dispatchers.Main) {
+        android.widget.Toast.makeText(context,
+            "Torrent hazırlanıyor; başlangıç ve son parçalar bekleniyor (en fazla 90 saniye).",
+            android.widget.Toast.LENGTH_LONG).show()
+    }
+    awaitTorrentReadiness(url)
 }
 
 internal suspend fun requestTorrentConsent(context: Context): Boolean {
@@ -71,6 +81,7 @@ internal suspend fun prepareTorrentStream(
     links: List<ExtractorLink>,
     index: Int?,
     consent: suspend () -> Boolean,
+    readiness: suspend (ExtractorLink) -> Unit = {},
     transform: suspend (ExtractorLink) -> ExtractorLink
 ): ExtractorLink {
     val link = index?.let { links.getOrNull(it) }
@@ -85,6 +96,8 @@ internal suspend fun prepareTorrentStream(
     if (!isLocalTorrentStream(converted.url)) {
         throw ErrorLoadingException("Torrent sunucusu oynatılabilir bağlantı oluşturamadı.")
     }
+    readiness(converted)
+    currentCoroutineContext().ensureActive()
     return converted
 }
 

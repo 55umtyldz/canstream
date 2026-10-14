@@ -15,6 +15,8 @@ object CloudStreamProviderRegistryAdapter {
         "com.cloudstream.tr.hdfilmdelisi.HDFilmDelisi",
         "com.cloudstream.tr.yesilcamtv.YesilCamTv",
         "com.cloudstream.tr.sezonlukdizi.SezonlukDizi",
+        "com.cloudstream.tr.startv.StarTV",
+        "com.cloudstream.tr.diziizle.DiziIzle",
         "com.cloudstream.tr.diziyou.DiziYou",
         "com.cloudstream.tr.dizikorea.DiziKorea",
         "com.cloudstream.tr.dizilla.Dizilla",

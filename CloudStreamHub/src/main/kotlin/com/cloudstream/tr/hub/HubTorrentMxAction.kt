@@ -34,6 +34,7 @@ class HubTorrentMxAction : OpenInAppAction(
     ) {
         val converted = prepareTorrentStream(result.links, index,
             consent = { requestTorrentConsent(context) },
+            readiness = { prepareTorrentForExternalPlayer(context, it.url) },
             transform = { Torrent.transformLink(it).first })
         intent.setDataAndType(Uri.parse(converted.url), "video/*")
         intent.putExtra("title", video.name)

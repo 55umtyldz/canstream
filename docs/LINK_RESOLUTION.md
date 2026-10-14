@@ -143,3 +143,7 @@ CloudStreamHub, CloudStream 4.8.0 üzerinde torrentler için iki ayrı bölüm m
 Bölüme uzun basın, Hub dış oynatıcı seçeneğini seçin ve kaynak listesinden istediğiniz torrenti açın. Eklenti, seçilen torrentin dosya indeksini değiştirmeden CloudStream torrent sunucusunun oluşturduğu HTTP akışını oynatıcıya aktarır. Mevcut oturumda torrent izni verilmemişse P2P onayı istenir.
 
 Bu aktarım CloudStream APK’sını ve varsayılan oynatıcı ayarını değiştirmez. Torrentin eşlere bağlanamamasını, cihazın codec/çözünürlük sınırlarını veya dış oynatıcının desteklemediği ses biçimlerini gidermez. CloudStream arka planda kapatılırsa yerel torrent akışı kesilir.
+
+v30, HTTP bağlantısı oluşturulduktan sonra seçilen dosya için sunucunun `preload`/`stat` işlemini çağırır. Oynatıcı açılmadan önce dosyanın başından ve sonundan en fazla 64 KiB gerçek veri okunur; HTTP 206, Content-Range, dosya boyutu ve okunan veri uzunluğu doğrulanır. Dosya indeksi değiştirilmez. Bu hazırlık en fazla 90 saniye sürer; başarısızsa oynatıcı açılmaz ve başka kaynak denenmesini isteyen hata gösterilir. Sunucunun bağlantıyı oluşturduğu önceki bootstrap aşaması bu 90 saniyeye dahil değildir.
+
+Kullanıcı iptali HTTP isteğini durdurur; sunucuda başlamış senkron ön yükleme devam edebilir. Eklenti paylaşılan sunucuyu kapatmaz, torrent silmez veya önbellek ayarını değiştirmez. Başlangıç/son verisinin hazır olması sürekli oynatma, ses, codec desteği veya ileri sarma başarısı anlamına gelmez; bunlar cihazda ayrıca doğrulanmalıdır.

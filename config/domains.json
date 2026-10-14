@@ -475,6 +475,32 @@
       "lastChecked": null,
       "status": "dead"
     },
+    "StarTV": {
+      "canonical": "https://www.startv.com.tr",
+      "allowedHosts": [
+        "www.startv.com.tr",
+        "startv.com.tr"
+      ],
+      "expectedMarkers": [
+        "Star",
+        "startv"
+      ],
+      "lastChecked": null,
+      "status": "active"
+    },
+    "DiziIzle": {
+      "canonical": "https://www.diziizle.you",
+      "allowedHosts": [
+        "www.diziizle.you",
+        "diziizle.you"
+      ],
+      "expectedMarkers": [
+        "bl-liste",
+        "film-dizi"
+      ],
+      "lastChecked": null,
+      "status": "active"
+    },
     "YTS": {
       "canonical": "https://yts.gg",
       "allowedHosts": [
