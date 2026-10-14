@@ -97,6 +97,38 @@ class TorrentResolversTest {
     }
 
     @Test
+    fun ytsReturnsFirstValidMirrorWithoutWaitingForSlowOne() = runBlocking {
+        val abandoned = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val result = firstNonEmptyMirror(listOf<suspend () -> List<String>>(
+            {
+                try { kotlinx.coroutines.awaitCancellation() }
+                finally { abandoned.complete(Unit) }
+            },
+            { listOf("2160p REMUX") }
+        ))
+        assertEquals(listOf("2160p REMUX"), result)
+        abandoned.await()
+    }
+
+    @Test
+    fun ytsFirstSuccessSkipsEmptyMirrorAndPropagatesUserCancellation() = runBlocking {
+        assertEquals(listOf("1080p"), firstNonEmptyMirror(listOf<suspend () -> List<String>>(
+            { emptyList() }, { listOf("1080p") }
+        )))
+        assertTrue(firstNonEmptyMirror(listOf<suspend () -> List<String>>(
+            { emptyList() }, { emptyList() }
+        )).isEmpty())
+        try {
+            firstNonEmptyMirror(listOf<suspend () -> List<String>>(
+                { throw kotlinx.coroutines.CancellationException("user exited") }
+            ))
+            fail("Cancellation must propagate")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            assertEquals("user exited", e.message)
+        }
+    }
+
+    @Test
     fun ytsRejectsHtmlInvalidSchemaErrorsAndWrongMovie() = runBlocking {
         assertNull(YtsResolver.parseResponse("<html>blocked</html>"))
         assertNull(YtsResolver.parseResponse("{invalid json}"))
