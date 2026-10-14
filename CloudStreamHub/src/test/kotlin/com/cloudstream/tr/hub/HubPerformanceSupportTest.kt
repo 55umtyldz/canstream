@@ -50,6 +50,26 @@ class HubPerformanceSupportTest {
         assertEquals(3, peak.get())
     }
 
+    @Test fun globalPreflightBudgetIsSharedAcrossConcurrentBatches() = runBlocking {
+        val running = AtomicInteger()
+        val peak = AtomicInteger()
+        kotlinx.coroutines.coroutineScope {
+            repeat(4) {
+                kotlinx.coroutines.launch {
+                    resolveHubPreflight((1..9).toList(), 3) {
+                        HubGlobalPreflight.run {
+                            val count = running.incrementAndGet()
+                            peak.updateAndGet { previous -> maxOf(previous, count) }
+                            try { delay(20) } finally { running.decrementAndGet() }
+                        }
+                    }
+                }
+            }
+        }
+        assertTrue("Global HTTP preflight budget must be shared", peak.get() <= 6)
+        assertTrue(peak.get() >= 3)
+    }
+
     @Test fun compatibilityIsAdvisoryAndProfilesValidated() {
         assertTrue(HubPlaybackCompatibility.guidance("Movie.HEVC.REMUX", false).contains("HEVC"))
         assertTrue(HubPlaybackCompatibility.guidance("Movie.DOVI.TrueHD", true).contains("bağlıdır"))

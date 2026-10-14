@@ -94,6 +94,12 @@ internal object HubReadAheadPolicy {
     }
 }
 
+/** Across all simultaneous providers and loadLinks invocations, at most six HTTP probes. */
+internal object HubGlobalPreflight {
+    private val permits = Semaphore(6)
+    suspend fun <T> run(block: suspend () -> T): T = permits.withPermit { block() }
+}
+
 /** Concurrency capped at four; coroutine cancellation propagates. */
 internal suspend fun <T> resolveHubPreflight(
     candidates: List<T>, concurrency: Int = 3,

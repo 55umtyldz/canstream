@@ -430,7 +430,8 @@ class CloudStreamHub : MainAPI() {
                                 val seenUrls = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
                                 val rawLinksReceived = AtomicInteger(0)
                                 val standardCandidates = AtomicInteger(0)
-                                val featureCandidates = AtomicInteger(0)
+                                val featureCandidates = HubFeatureTopK(HubCandidateBudget.RESERVED_FEATURE - 1)
+                                val firstFeature = java.util.concurrent.atomic.AtomicBoolean(false)
                                 val duplicatesDropped = AtomicInteger(0)
                                 val channelOverflowDropped = AtomicInteger(0)
                                 val preflightValid = AtomicInteger(0)
@@ -467,11 +468,13 @@ class CloudStreamHub : MainAPI() {
                                                         reqHeaders["Referer"] = rawLink.referer
                                                     }
                                                     val started = System.nanoTime()
-                                                    val result = StreamValidator.validateStream(
-                                                        url = rawUrl,
-                                                        headers = reqHeaders,
-                                                        provider = provider.name
-                                                    )
+                                                    val result = HubGlobalPreflight.run {
+                                                        StreamValidator.validateStream(
+                                                            url = rawUrl,
+                                                            headers = reqHeaders,
+                                                            provider = provider.name
+                                                        )
+                                                    }
                                                     HubPerformanceTelemetry.record(
                                                         "preflight", (System.nanoTime() - started) / 1_000_000,
                                                         result.status.name
@@ -513,17 +516,34 @@ class CloudStreamHub : MainAPI() {
                                             subtitleCallback = subtitleCallback,
                                             callback = { rawLink ->
                                                 rawLinksReceived.incrementAndGet()
-                                                if (HubCandidateBudget.admit(rawLink, standardCandidates, featureCandidates)) {
-                                                    val result = channel.trySend(rawLink)
-                                                    if (!result.isSuccess) channelOverflowDropped.incrementAndGet()
-                                                } else {
-                                                    channelOverflowDropped.incrementAndGet()
+                                                when {
+                                                    HubCandidateBudget.isFeatureCandidate(rawLink) -> {
+                                                        // Publish the first feature promptly; keep the best
+                                                        // later ones in bounded Top-K rather than first 32.
+                                                        if (firstFeature.compareAndSet(false, true)) {
+                                                            if (!channel.trySend(rawLink).isSuccess)
+                                                                featureCandidates.offer(rawLink)
+                                                        } else {
+                                                            featureCandidates.offer(rawLink)
+                                                        }
+                                                    }
+                                                    standardCandidates.incrementAndGet() <= HubCandidateBudget.MAX_STANDARD -> {
+                                                        if (!channel.trySend(rawLink).isSuccess)
+                                                            channelOverflowDropped.incrementAndGet()
+                                                    }
+                                                    else -> channelOverflowDropped.incrementAndGet()
                                                 }
                                             }
                                         )
                                     } finally {
-                                        // Avoid the default-argument bridge absent in the host coroutine runtime.
-                                        channel.close(null)
+                                        try {
+                                            // Provider complete: deliver best 31 held feature candidates.
+                                            // No retroactive retraction of previously published sources.
+                                            for (feature in featureCandidates.snapshot()) channel.send(feature)
+                                        } finally {
+                                            // Avoid host coroutine default-argument bridge.
+                                            channel.close(null)
+                                        }
                                     }
 
                                     consumerJob.join()
