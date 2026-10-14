@@ -54,13 +54,16 @@ object TorrentioResolver {
         return Qualities.Unknown.value
     }
 
-    internal fun seedCount(title: String): Int {
+    /** Unknown seed count is not zero peers. */
+    internal fun reportedSeeds(title: String): Int? {
         val value = Regex("""(?:\uD83D\uDC64|\uD83D\uDC65|\bseeds?\s*[:=]?)\s*([0-9][0-9,]*)""", RegexOption.IGNORE_CASE)
             .find(title)?.groupValues?.get(1)
             ?: Regex("""([0-9][0-9,]*)\s+seeds?\b""", RegexOption.IGNORE_CASE)
                 .find(title)?.groupValues?.get(1)
-        return value?.replace(",", "")?.toIntOrNull() ?: 0
+        return value?.replace(",", "")?.toIntOrNull()
     }
+
+    internal fun seedCount(title: String): Int = reportedSeeds(title) ?: 0
 
     suspend fun resolve(imdbId: String, isMovie: Boolean, season: Int? = null, episode: Int? = null): List<ExtractorLink> {
         if (!Regex("tt[0-9]+").matches(imdbId)) return emptyList()
@@ -98,9 +101,9 @@ object TorrentioResolver {
                 return@mapNotNull null
             }
 
-            val seedCount = seedCount(rawTitle)
+            val seedCount = reportedSeeds(rawTitle)
             val isDirectUrl = stream.url?.let { it.startsWith("https://", true) || it.startsWith("http://", true) } == true
-            if (!hasDebrid && !isDirectUrl && seedCount < 3) return@mapNotNull null
+            if (!hasDebrid && !isDirectUrl && seedCount != null && seedCount < 3) return@mapNotNull null
 
             val sizeMatch = Regex("""\b(\d+(?:\.\d+)?\s*[GgMm]B)\b""").find(rawTitle)
             val size = sizeMatch?.groupValues?.get(1) ?: ""
@@ -109,7 +112,7 @@ object TorrentioResolver {
             val resolution = if (mappedQuality == Qualities.Unknown.value) "Unknown" else "${mappedQuality}p"
 
             val isRemux = rawTitle.contains("REMUX", ignoreCase = true)
-            val isDV = rawTitle.contains("DV", ignoreCase = true) || rawTitle.contains("Dolby Vision", ignoreCase = true)
+            val isDV = Regex("""(?i)(?:\bDV\b|\bDOVI\b|\bDolby[ ._-]?Vision\b)""").containsMatchIn(rawTitle)
             val isHDR10Plus = rawTitle.contains("HDR10+", ignoreCase = true)
             val isHDR = rawTitle.contains("HDR", ignoreCase = true) && !isHDR10Plus
             val isTrueHD = rawTitle.contains("TrueHD", ignoreCase = true)
@@ -131,7 +134,7 @@ object TorrentioResolver {
             else if (is71) tags += " [7.1]"
             else if (is51) tags += " [5.1]"
 
-            val seedStr = " ($seedCount seeds)"
+            val seedStr = if (seedCount == null) " (seeds unknown)" else " ($seedCount seeds)"
             val prefixStr = if (hasDebrid) "🚀 Debrid " else "Torrentio • "
             val displayName = "$prefixStr$resolution$tags ${if (size.isNotBlank()) "[$size] " else ""}$seedStr".trim()
 
@@ -152,14 +155,15 @@ object TorrentioResolver {
             val cleanTitle = stream.behaviorHints?.filename?.takeIf { it.isNotBlank() } ?: sanitizedTitle
             val encodedTitle = URLEncoder.encode(cleanTitle, "UTF-8")
 
-            val fileIndex = stream.fileIdx ?: 0
-            if (fileIndex < 0) return@mapNotNull null
-            if (stream.fileIdx == null) {
+            // The first file of a multi-file feature is not necessarily the movie.
+            val fileIndex = stream.fileIdx
+            if (fileIndex == null || fileIndex < 0) {
                 DiagnosticLogger.log(
                     provider = "Torrentio", stage = DiagnosticStage.EXTRACTOR,
                     category = DiagnosticCategory.SOURCE_DISCOVERY,
-                    message = "Torrent candidate has no file index; preserving index=0 fallback"
+                    message = "Torrent candidate skipped: file index missing or invalid"
                 )
+                return@mapNotNull null
             }
             val magnetUrl = "magnet:?xt=urn:btih:$hash&dn=$encodedTitle&index=$fileIndex${TorrentTrackers.magnetParams(stream.sources.orEmpty())}"
 

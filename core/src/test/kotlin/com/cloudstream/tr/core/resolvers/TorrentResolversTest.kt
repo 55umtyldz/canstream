@@ -36,6 +36,8 @@ class TorrentResolversTest {
         assertEquals(12, TorrentioResolver.seedCount("seeds: 12"))
         assertEquals(42, TorrentioResolver.seedCount("42 seeds"))
         assertEquals(0, TorrentioResolver.seedCount("Movie.2026.2160p"))
+        assertNull(TorrentioResolver.reportedSeeds("Movie.2026.2160p"))
+        assertEquals(0, TorrentioResolver.reportedSeeds("0 seeds"))
     }
 
     @Test
@@ -55,11 +57,10 @@ class TorrentResolversTest {
         DiagnosticLogger.addListener(listener)
         try {
             val links = TorrentioResolver.mapStreams(listOf(stream(0), stream(7), stream(null)), false)
-            assertEquals(3, links.size)
+            assertEquals(2, links.size)
             assertTrue(links[0].url.contains("&index=0&"))
             assertTrue(links[1].url.contains("&index=7&"))
-            assertTrue(links[2].url.contains("&index=0&"))
-            assertEquals(1, events.count { it.message.contains("no file index") })
+            assertEquals(1, events.count { it.message.contains("file index missing") })
         } finally {
             DiagnosticLogger.removeListener(listener)
         }
@@ -72,6 +73,17 @@ class TorrentResolversTest {
         val links = TorrentioResolver.mapStreams(streams, false)
         assertEquals(4, links.size)
         assertTrue(links.all { it.quality == 2160 && it.name.contains("[DV]") })
+    }
+
+    @Test
+    fun unknownSeedCandidatesAndExplicitDolbyVisionTags() = runBlocking {
+        val unknown = TorrentioResolver.mapStreams(listOf(stream(3, "Movie.2160p.REMUX")), false)
+        assertEquals(1, unknown.size)
+        assertTrue(unknown.single().name.contains("seeds unknown"))
+        assertFalse(unknown.single().name.contains("[DV]"))
+        val dolby = TorrentioResolver.mapStreams(listOf(stream(3, "Movie.2160p.DOVI.REMUX")), false)
+        assertTrue(dolby.single().name.contains("[DV]"))
+        assertTrue(TorrentioResolver.mapStreams(listOf(stream(3, "Movie.2160p (0 seeds)")), false).isEmpty())
     }
 
     @Test
