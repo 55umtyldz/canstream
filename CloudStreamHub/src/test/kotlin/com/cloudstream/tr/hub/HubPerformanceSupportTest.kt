@@ -2,6 +2,7 @@ package com.cloudstream.tr.hub
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 import org.junit.Assert.*
 import org.junit.Test
 import java.util.concurrent.atomic.AtomicInteger
@@ -55,7 +56,7 @@ class HubPerformanceSupportTest {
         val peak = AtomicInteger()
         kotlinx.coroutines.coroutineScope {
             repeat(4) {
-                kotlinx.coroutines.launch {
+                launch {
                     resolveHubPreflight((1..9).toList(), 3) {
                         HubGlobalPreflight.run {
                             val count = running.incrementAndGet()
