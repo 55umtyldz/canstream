@@ -28,15 +28,57 @@ class HubLinkSelectionTest {
         assertEquals(selected, HubTorrentSelector.select(links.reversed()))
     }
 
+    @Test fun profileRankingKeepsPeerHealthPrimaryButCanPreferBluRayFeature() {
+        val regular = torrent(91, seeds = 30, quality = 2160)
+        val remux = ExtractorLink(
+            source = "Torrentio", name = "2160p BluRay REMUX (25 seeds)",
+            url = torrent(92).url, referer = "", quality = 2160, type = ExtractorLinkType.MAGNET
+        )
+        assertTrue(HubTorrentSelector.sourceScore(regular, HubPerformanceSettings.AUTO) >
+            HubTorrentSelector.sourceScore(remux, HubPerformanceSettings.AUTO))
+        assertTrue(HubTorrentSelector.sourceScore(remux, HubPerformanceSettings.FEATURE) >
+            HubTorrentSelector.sourceScore(regular, HubPerformanceSettings.FEATURE))
+        val difficult = ExtractorLink(
+            source = "Torrentio", name = "2160p DOVI TrueHD (30 seeds)",
+            url = torrent(93).url, referer = "", quality = 2160, type = ExtractorLinkType.MAGNET
+        )
+        assertTrue(HubTorrentSelector.sourceScore(regular, HubPerformanceSettings.COMPATIBLE) >
+            HubTorrentSelector.sourceScore(difficult, HubPerformanceSettings.COMPATIBLE))
+    }
+
     @Test fun sameSwarmIsOneAlternativeButDifferentIndexIsNotRewritten() {
         val torrentio = torrent(1, seeds = 100)
         val yts = torrent(1, "YTS", seeds = 0, tracker = "b")
         assertEquals(listOf(yts), HubTorrentSelector.select(listOf(torrentio, yts)))
         val otherFile = torrent(1, "YTS", seeds = 0, index = 2)
-        assertEquals(listOf(torrentio), HubTorrentSelector.select(listOf(torrentio, otherFile)))
+        assertEquals(listOf(torrentio, otherFile), HubTorrentSelector.select(listOf(torrentio, otherFile)))
         val base32 = ExtractorLink(source = "YTS", name = "YTS", url = "magnet:?xt=urn:btih:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
             referer = "", quality = 1080, type = ExtractorLinkType.MAGNET)
         assertEquals(HubTorrentSelector.swarm(torrent(0)), HubTorrentSelector.swarm(base32))
+    }
+
+    @Test fun late4kRemuxOriginGetsReservedSlotAfterYtsCandidates() {
+        val yts = (1..6).map { torrent(100 + it, "YTS", quality = 2160, seeds = 40) }
+        val early = HubTorrentSelector.select(yts)
+        assertEquals("Early origin must leave one 4K slot open", 3, early.size)
+        val lateRemux = torrent(150, "Torrentio", quality = 2160, seeds = 25)
+        val acceptedLate = HubTorrentSelector.select(listOf(lateRemux), early)
+        assertEquals(listOf(lateRemux), acceptedLate)
+        val afterFour = early + acceptedLate
+        assertTrue(HubTorrentSelector.select(listOf(torrent(151, "Other", quality = 2160)), afterFour).isEmpty())
+        // Ordinary 1080p quotas must remain at three alternatives.
+        assertEquals(3, HubTorrentSelector.select((1..6).map { torrent(300 + it, "YTS", quality = 1080) }).size)
+    }
+
+    @Test fun differentEpisodesFromSameTorrentHaveIndependentIdentity() {
+        val s1e1 = torrent(7, index = 1)
+        val s1e2 = torrent(7, index = 2)
+        val s1e1Duplicate = torrent(7, index = 1, tracker = "other")
+        val selected = HubTorrentSelector.select(listOf(s1e1, s1e2, s1e1Duplicate))
+        assertEquals(2, selected.size)
+        assertTrue(selected.any { it.url.contains("index=1") })
+        assertTrue(selected.any { it.url.contains("index=2") })
+        assertEquals(listOf(s1e2), HubTorrentSelector.select(listOf(s1e2), listOf(s1e1)))
     }
 
     @Test fun callbacksAreImmediateForEveryHttpLinkAndTorrentQuotaSpansBatches() {
@@ -65,6 +107,18 @@ class HubLinkSelectionTest {
         assertEquals(1, emitted.size)
     }
 
+    @Test fun cachedMagnetsAreOnlyPublishedThroughTorrentPolicy() {
+        val cached = torrent(10, "YTS", quality = 2160)
+        val fresh = torrent(11, "Torrentio", quality = 2160)
+        val emitted = mutableListOf<ExtractorLink>()
+        val collector = HubLinkCollector(true, false, emitted::add)
+        collector.direct(cached)
+        assertTrue("Direct path must never publish a magnet", emitted.isEmpty())
+        collector.torrents(listOf(fresh))
+        collector.torrents(HubTorrentSelector.cachedFallback(listOf(cached), listOf(fresh), true))
+        assertEquals(listOf(fresh, cached), emitted)
+    }
+
     @Test fun cacheOnlySuppliesUnavailableOriginsWithoutExceedingQuota() {
         val fresh = listOf(torrent(1), torrent(2), torrent(3))
         val cached = listOf(torrent(4), torrent(5, "YTS"), torrent(6, "Federated"))
@@ -78,6 +132,73 @@ class HubLinkSelectionTest {
         assertTrue(emitted.contains(cached[1]))
         assertFalse(emitted.contains(cached[0]))
         assertEquals(listOf(cached[2]), HubTorrentSelector.cachedFallback(cached, fresh, false))
+    }
+
+    @Test fun lateBluRayCandidatesRetainReservedQueueSlots() {
+        val standard = java.util.concurrent.atomic.AtomicInteger(0)
+        val feature = java.util.concurrent.atomic.AtomicInteger(0)
+        val low = torrent(91, quality = 720)
+        val featureLink = torrent(92, quality = 2160)
+        assertEquals(HubCandidateBudget.MAX_STANDARD, (1..140).count {
+            HubCandidateBudget.admit(low, standard, feature)
+        })
+        assertEquals(HubCandidateBudget.RESERVED_FEATURE, (1..60).count {
+            HubCandidateBudget.admit(featureLink, standard, feature)
+        })
+        assertEquals(128, HubCandidateBudget.MAX_STANDARD + HubCandidateBudget.RESERVED_FEATURE)
+        assertTrue(HubCandidateBudget.isFeatureCandidate(ExtractorLink(source = "Torrentio", name = "Feature.BluRay.REMUX", url = "magnet:?xt=urn:btih:${"a".repeat(40)}&index=0", referer = "", quality = -1, type = ExtractorLinkType.MAGNET)))
+        assertFalse(HubCandidateBudget.isFeatureCandidate(low))
+    }
+
+    @Test fun torrentSourceBudgetStopsSlowOriginWithoutDroppingFastBatch() = kotlinx.coroutines.test.runTest {
+        val emitted = mutableListOf<String>()
+        val finished = HubSourceBudget.run(20) {
+            emitted.add("2160p Remux")
+            delay(100_000)
+        }
+        assertFalse(finished)
+        assertEquals(listOf("2160p Remux"), emitted)
+        assertEquals(20L, testScheduler.currentTime)
+    }
+
+    @Test fun torrentSourceBudgetDoesNotSwallowCancellation() = kotlinx.coroutines.runBlocking {
+        val cancelled = CancellationException("player closed")
+        try {
+            HubSourceBudget.run(HubSourceBudget.TORRENT_DISCOVERY_MS) { throw cancelled }
+            fail("Must rethrow cancellation")
+        } catch (e: CancellationException) {
+            assertEquals("player closed", e.message)
+            assertFalse(e is TimeoutCancellationException)
+        }
+    }
+
+    @Test fun candidateCapKeepsProviderMemoryBounded() {
+        assertTrue(HubCandidateBudget.allow(1))
+        assertTrue(HubCandidateBudget.allow(HubCandidateBudget.MAX_PER_PROVIDER))
+        assertFalse(HubCandidateBudget.allow(HubCandidateBudget.MAX_PER_PROVIDER + 1))
+        assertFalse(HubCandidateBudget.allow(0))
+    }
+
+    @Test fun globalFederationBudgetKeepsAlreadyEmittedResults() = kotlinx.coroutines.test.runTest {
+        val published = mutableListOf<String>()
+        val completed = HubFederationBudget.run(25) {
+            published.add("1080p")
+            delay(60_000)
+            published.add("late")
+        }
+        assertFalse(completed)
+        assertEquals(listOf("1080p"), published)
+        assertEquals(25L, testScheduler.currentTime)
+    }
+
+    @Test fun globalFederationBudgetPropagatesExplicitCancellation() = kotlinx.coroutines.test.runTest {
+        val cancellation = CancellationException("user exited")
+        try {
+            HubFederationBudget.run { throw cancellation }
+            fail("Cancellation swallowed")
+        } catch (e: CancellationException) {
+            assertEquals("user exited", e.message)
+        }
     }
 
     @Test fun providerTimeoutStartsAfterPermitAndPreservesEmittedLinks() = kotlinx.coroutines.test.runTest {

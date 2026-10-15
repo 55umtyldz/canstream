@@ -16,6 +16,23 @@ class TorrentResolversTest {
         TorrentioStream(title = title, infoHash = hash, fileIdx = index)
 
     @Test
+    fun torrentioOnlyMarksExplicitEmptyResponsesAsAuthoritative() = runBlocking {
+        val empty = TorrentioResolver.parseStreamEvidence(TorrentioResponse(emptyList()), false)
+        assertTrue(empty.links.isEmpty())
+        assertTrue(empty.authoritativeEmpty)
+
+        val malformed = TorrentioResolver.parseStreamEvidence(TorrentioResponse(null), false)
+        assertTrue(malformed.links.isEmpty())
+        assertFalse(malformed.authoritativeEmpty)
+
+        val filtered = TorrentioResolver.parseStreamEvidence(
+            TorrentioResponse(listOf(stream(index = 2, title = "Movie 2160p (0 seeds)"))), false
+        )
+        assertTrue(filtered.links.isEmpty())
+        assertFalse("Filtered candidates are not authoritative empty", filtered.authoritativeEmpty)
+    }
+
+    @Test
     fun trackersPreserveUpstreamAndFallbacksWithoutDhtOrDuplicates() {
         val upstream = "https://tracker.example/announce?passkey=one&mode=two"
         val trackers = TorrentTrackers.magnetParams(listOf(
@@ -36,6 +53,8 @@ class TorrentResolversTest {
         assertEquals(12, TorrentioResolver.seedCount("seeds: 12"))
         assertEquals(42, TorrentioResolver.seedCount("42 seeds"))
         assertEquals(0, TorrentioResolver.seedCount("Movie.2026.2160p"))
+        assertNull(TorrentioResolver.reportedSeeds("Movie.2026.2160p"))
+        assertEquals(0, TorrentioResolver.reportedSeeds("0 seeds"))
     }
 
     @Test
@@ -55,11 +74,10 @@ class TorrentResolversTest {
         DiagnosticLogger.addListener(listener)
         try {
             val links = TorrentioResolver.mapStreams(listOf(stream(0), stream(7), stream(null)), false)
-            assertEquals(3, links.size)
+            assertEquals(2, links.size)
             assertTrue(links[0].url.contains("&index=0&"))
             assertTrue(links[1].url.contains("&index=7&"))
-            assertTrue(links[2].url.contains("&index=0&"))
-            assertEquals(1, events.count { it.message.contains("no file index") })
+            assertEquals(1, events.count { it.message.contains("file index missing") })
         } finally {
             DiagnosticLogger.removeListener(listener)
         }
@@ -75,6 +93,17 @@ class TorrentResolversTest {
     }
 
     @Test
+    fun unknownSeedCandidatesAndExplicitDolbyVisionTags() = runBlocking {
+        val unknown = TorrentioResolver.mapStreams(listOf(stream(3, "Movie.2160p.REMUX")), false)
+        assertEquals(1, unknown.size)
+        assertTrue(unknown.single().name.contains("seeds unknown"))
+        assertFalse(unknown.single().name.contains("[DV]"))
+        val dolby = TorrentioResolver.mapStreams(listOf(stream(3, "Movie.2160p.DOVI.REMUX")), false)
+        assertTrue(dolby.single().name.contains("[DV]"))
+        assertTrue(TorrentioResolver.mapStreams(listOf(stream(3, "Movie.2160p (0 seeds)")), false).isEmpty())
+    }
+
+    @Test
     fun directLinksDoNotNeedSeedsOrHash() = runBlocking {
         val links = TorrentioResolver.mapStreams(listOf(
             TorrentioStream(title = "Movie", name = "Torrentio 1080p", url = "https://media.example/movie.mp4")
@@ -85,6 +114,38 @@ class TorrentResolversTest {
     }
 
     @Test
+    fun ytsReturnsFirstValidMirrorWithoutWaitingForSlowOne() = runBlocking {
+        val abandoned = kotlinx.coroutines.CompletableDeferred<Unit>()
+        val result = firstNonEmptyMirror(listOf<suspend () -> List<String>>(
+            {
+                try { kotlinx.coroutines.awaitCancellation() }
+                finally { abandoned.complete(Unit) }
+            },
+            { listOf("2160p REMUX") }
+        ))
+        assertEquals(listOf("2160p REMUX"), result)
+        abandoned.await()
+    }
+
+    @Test
+    fun ytsFirstSuccessSkipsEmptyMirrorAndPropagatesUserCancellation() = runBlocking {
+        assertEquals(listOf("1080p"), firstNonEmptyMirror(listOf<suspend () -> List<String>>(
+            { emptyList() }, { listOf("1080p") }
+        )))
+        assertTrue(firstNonEmptyMirror(listOf<suspend () -> List<String>>(
+            { emptyList() }, { emptyList() }
+        )).isEmpty())
+        try {
+            firstNonEmptyMirror(listOf<suspend () -> List<String>>(
+                { throw kotlinx.coroutines.CancellationException("user exited") }
+            ))
+            fail("Cancellation must propagate")
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            assertEquals("user exited", e.message)
+        }
+    }
+
+    @Test
     fun ytsRejectsHtmlInvalidSchemaErrorsAndWrongMovie() = runBlocking {
         assertNull(YtsResolver.parseResponse("<html>blocked</html>"))
         assertNull(YtsResolver.parseResponse("{invalid json}"))
@@ -92,6 +153,18 @@ class TorrentResolversTest {
         val movie = YtsMovie(imdbCode = "tt999", torrents = listOf(YtsTorrent(hash = hash, seeds = 10)))
         assertTrue(YtsResolver.mapResponse(YtsResponse("ok", YtsData(listOf(movie))), "tt123", false).isEmpty())
         assertTrue(YtsResolver.mapResponse(YtsResponse("error", YtsData(listOf(movie))), "tt999", false).isEmpty())
+    }
+
+    @Test
+    fun ytsUnknownSeedValuesAreNotDiscardedButKnownZeroIs() = runBlocking {
+        val movie = YtsMovie(imdbCode = "tt123", title = "Movie", torrents = listOf(
+            YtsTorrent(hash = hash, quality = "2160p", seeds = null),
+            YtsTorrent(hash = hash, quality = "720p", seeds = 0)
+        ))
+        val links = YtsResolver.mapResponse(YtsResponse("ok", YtsData(listOf(movie))), "tt123", false)
+        assertEquals(1, links.size)
+        assertEquals(2160, links.single().quality)
+        assertTrue(links.single().name.contains("seeds unknown"))
     }
 
     @Test

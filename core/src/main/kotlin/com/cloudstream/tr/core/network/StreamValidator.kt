@@ -5,6 +5,7 @@ import com.cloudstream.tr.core.diagnostics.DiagnosticLogger
 import com.cloudstream.tr.core.diagnostics.DiagnosticStage
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.InputStream
 
@@ -308,6 +309,8 @@ object StreamValidator {
                     media3ErrorCode = 2004
                 )
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             DiagnosticLogger.log(
                 provider = provider,
