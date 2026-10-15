@@ -1,0 +1,28 @@
+name: Upstream Patch Intelligence
+
+on:
+  schedule:
+    - cron: "23 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout target history
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Generate report-only upstream and fork comparison
+        run: python tools/upstream_intelligence.py --target . --output-dir reports/upstream-intelligence
+
+      - name: Upload comparison reports
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4
+        with:
+          name: upstream-patch-intelligence
+          path: reports/upstream-intelligence/
+          retention-days: 30
