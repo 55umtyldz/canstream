@@ -3,6 +3,7 @@ package com.cloudstream.tr.fourkhdhub
 import com.cloudstream.tr.core.resolvers.FourKhubResolver
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import org.jsoup.nodes.Document
 import java.net.URLEncoder
 
 class FourKHDHub : MainAPI() {
@@ -17,11 +18,8 @@ class FourKHDHub : MainAPI() {
         "$mainUrl/" to "Ana Sayfa"
     )
 
-    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        val targetUrl = if (page == 1) request.data else "${request.data}page/$page/"
-        val document = app.get(targetUrl).document
-
-        val items = document.select("article, div.post-item").mapNotNull { element ->
+    internal fun parseCards(document: Document): List<SearchResponse> =
+        document.select("article, div.post-item").mapNotNull { element ->
             val a = element.selectFirst("h2.entry-title a, a[rel='bookmark']") ?: element.selectFirst("a") ?: return@mapNotNull null
             val title = a.text()
             if (title.isBlank()) return@mapNotNull null
@@ -32,6 +30,11 @@ class FourKHDHub : MainAPI() {
                 this.posterUrl = poster
             }
         }
+
+    override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
+        val targetUrl = if (page == 1) request.data else "${request.data}page/$page/"
+        val document = app.get(targetUrl).document
+        val items = parseCards(document)
 
         return newHomePageResponse(request.name, items, hasNext = items.isNotEmpty())
     }
@@ -39,18 +42,7 @@ class FourKHDHub : MainAPI() {
     override suspend fun search(query: String): List<SearchResponse> {
         val targetUrl = "$mainUrl/?s=${URLEncoder.encode(query, "UTF-8")}"
         val document = app.get(targetUrl).document
-
-        return document.select("article, div.post-item").mapNotNull { element ->
-            val a = element.selectFirst("h2.entry-title a, a[rel='bookmark']") ?: element.selectFirst("a") ?: return@mapNotNull null
-            val title = a.text()
-            if (title.isBlank()) return@mapNotNull null
-            val href = a.attr("href")
-            val poster = element.selectFirst("img")?.attr("src")
-
-            newMovieSearchResponse(title, href, TvType.Movie) {
-                this.posterUrl = poster
-            }
-        }
+        return parseCards(document)
     }
 
     override suspend fun quickSearch(query: String): List<SearchResponse> = search(query)

@@ -277,22 +277,24 @@ def main():
             if len(plugins) != len(enabled_providers):
                 errors.append(f"plugins.json entry count ({len(plugins)}) != enabled providers count ({len(enabled_providers)})")
 
+            cs3_by_name = {}
+            for root, _, files in os.walk(repo_root):
+                for file in files:
+                    if file.endswith(".cs3"):
+                        cs3_by_name.setdefault(file, []).append(os.path.join(root, file))
+
             for p in plugins:
                 p_name = p.get("name")
                 p_hash = p.get("fileHash")
                 if not p_hash:
                     errors.append(f"Plugin {p_name} is missing fileHash in plugins.json")
                 # Look for corresponding .cs3
-                cs3_found = False
-                for r, _, files in os.walk(repo_root):
-                    for file in files:
-                        if file == f"{p_name}.cs3":
-                            cs3_path = os.path.join(r, file)
-                            cs3_found = True
-                            if p_hash and not check_file_hash(cs3_path, p_hash):
-                                errors.append(f"Hash mismatch for {file}!")
-                if not cs3_found:
+                cs3_paths = cs3_by_name.get(f"{p_name}.cs3", [])
+                if not cs3_paths:
                     errors.append(f"Missing .cs3 artifact file for plugin {p_name}")
+                for cs3_path in cs3_paths:
+                    if p_hash and not check_file_hash(cs3_path, p_hash):
+                        errors.append(f"Hash mismatch for {os.path.basename(cs3_path)}!")
 
     if errors:
         print(f"\n=== Validation Failures ({len(errors)}) ===")

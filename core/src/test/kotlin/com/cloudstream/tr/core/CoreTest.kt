@@ -5,6 +5,9 @@ import com.cloudstream.tr.core.extractors.RapidVidExtractor
 import com.cloudstream.tr.core.model.ProviderModels
 import com.cloudstream.tr.core.network.PreflightResult
 import com.cloudstream.tr.core.network.SafeHttpClient
+import com.cloudstream.tr.core.network.InFlightRequestDeduplicator
+import com.cloudstream.tr.core.network.GetRequestKey
+import com.cloudstream.tr.core.network.safeHttpCall
 import com.cloudstream.tr.core.network.StreamValidator
 import com.cloudstream.tr.core.network.ValidationStatus
 import com.lagradost.cloudstream3.MainAPI
@@ -13,6 +16,12 @@ import com.lagradost.cloudstream3.newMovieSearchResponse
 import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
@@ -76,6 +85,130 @@ class CoreTest {
         assertEquals("XMLHttpRequest", headers["X-Requested-With"])
         assertEquals("https://example.com/", headers["Referer"])
         assertEquals(SafeHttpClient.DEFAULT_USER_AGENT, headers["User-Agent"])
+    }
+
+    @Test
+    fun deduplicatedRequestsShareOnlyMatchingRequestOptions() = runBlocking {
+        val deduplicator = InFlightRequestDeduplicator<String, String>()
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        var fetchCount = 0
+
+        coroutineScope {
+            val first = async {
+                deduplicator.execute("url|header-a|cache-0") {
+                    fetchCount++
+                    started.complete(Unit)
+                    release.await()
+                    "response"
+                }
+            }
+            started.await()
+            val duplicate = async {
+                deduplicator.execute("url|header-a|cache-0") {
+                    fetchCount++
+                    "unexpected"
+                }
+            }
+            val differentHeaders = async {
+                deduplicator.execute("url|header-b|cache-0") {
+                    fetchCount++
+                    "header-b"
+                }
+            }
+            val differentCache = async {
+                deduplicator.execute("url|header-a|cache-60") {
+                    fetchCount++
+                    "cache-60"
+                }
+            }
+
+            assertEquals("header-b", differentHeaders.await())
+            assertEquals("cache-60", differentCache.await())
+            release.complete(Unit)
+            assertEquals("response", first.await())
+            assertEquals("response", duplicate.await())
+        }
+        assertEquals(3, fetchCount)
+        assertNotEquals(
+            GetRequestKey("https://example.test", mapOf("Authorization" to "a"), 0),
+            GetRequestKey("https://example.test", mapOf("Authorization" to "b"), 0)
+        )
+        assertNotEquals(
+            GetRequestKey("https://example.test", emptyMap(), 0),
+            GetRequestKey("https://example.test", emptyMap(), 60)
+        )
+    }
+
+    @Test
+    fun cancellingWaiterDoesNotCancelSharedRequest() = runBlocking {
+        val deduplicator = InFlightRequestDeduplicator<String, String>()
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+
+        coroutineScope {
+            val owner = async {
+                deduplicator.execute("shared") {
+                    started.complete(Unit)
+                    release.await()
+                    "ok"
+                }
+            }
+            started.await()
+            val waiter = async { deduplicator.execute("shared") { "unexpected" } }
+            waiter.cancelAndJoin()
+            release.complete(Unit)
+            assertEquals("ok", owner.await())
+        }
+
+    }
+
+    @Test
+    fun cancellingRequestOwnerPropagatesAndCleansEntry() = runBlocking {
+        val deduplicator = InFlightRequestDeduplicator<String, String>()
+        val started = CompletableDeferred<Unit>()
+
+        coroutineScope {
+            val owner = async {
+                deduplicator.execute("cancelled") {
+                    started.complete(Unit)
+                    awaitCancellation()
+                }
+            }
+            started.await()
+            owner.cancelAndJoin()
+        }
+        assertEquals("recovered", deduplicator.execute("cancelled") { "recovered" })
+    }
+
+    @Test
+    fun deduplicatedFailurePropagatesAndDoesNotPoisonNextRequest() = runBlocking {
+        val deduplicator = InFlightRequestDeduplicator<String, String>()
+        val expected = IllegalStateException("request failed")
+        try {
+            deduplicator.execute("failure") { throw expected }
+            fail("Failure must propagate")
+        } catch (actual: IllegalStateException) {
+            assertSame(expected, actual)
+        }
+        assertEquals("recovered", deduplicator.execute("failure") { "recovered" })
+    }
+
+    @Test
+    fun safeHttpCallReturnsNullOnErrorButPropagatesCancellation() = runBlocking {
+        var reportedFailure: Exception? = null
+        assertNull(safeHttpCall<String>(request = { throw IllegalStateException("offline") }) {
+            reportedFailure = it
+        })
+        assertTrue(reportedFailure is IllegalStateException)
+
+        val cancellation = CancellationException("cancel request")
+        try {
+            safeHttpCall<String>(request = { throw cancellation }) { fail("Cancellation is not a network failure") }
+            fail("Cancellation must propagate")
+        } catch (actual: CancellationException) {
+            assertSame(cancellation, actual)
+        }
     }
 
     @Test
@@ -255,6 +388,12 @@ class CoreTest {
         assertFalse(cleanMsg.contains("xyz987654321"))
         assertFalse(cleanMsg.contains("secret_bearer_token_12345"))
         assertTrue(cleanMsg.contains("[REDACTED]"))
+
+        val diagnosticUrl = com.cloudstream.tr.core.diagnostics.DiagnosticLogger.redactUrl(
+            "https://cdn.example.com/path?token=private_token&signature=private_signature"
+        )
+        assertFalse(diagnosticUrl.contains("private_token"))
+        assertFalse(diagnosticUrl.contains("private_signature"))
     }
 
     @Test

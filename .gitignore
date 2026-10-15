@@ -115,3 +115,6 @@ desktop.ini
 $RECYCLE.BIN/
 
 .*
+!.github/
+!.github/workflows/
+!.github/workflows/upstream-intelligence.yml

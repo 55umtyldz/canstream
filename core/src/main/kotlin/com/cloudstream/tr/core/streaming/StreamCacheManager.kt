@@ -30,9 +30,12 @@ object StreamCacheManager {
     }
 
     fun get(key: String): List<ExtractorLink>? {
+        return getAt(key, System.currentTimeMillis())
+    }
+
+    internal fun getAt(key: String, nowMs: Long): List<ExtractorLink>? {
         val entry = cache[key] ?: return null
-        val now = System.currentTimeMillis()
-        if (now - entry.timestamp > TTL_MS) {
+        if (nowMs - entry.timestamp >= TTL_MS) {
             cache.remove(key)
             return null
         }
@@ -40,9 +43,13 @@ object StreamCacheManager {
     }
 
     fun put(key: String, links: List<ExtractorLink>) {
+        putAt(key, links, System.currentTimeMillis())
+    }
+
+    internal fun putAt(key: String, links: List<ExtractorLink>, timestampMs: Long) {
         if (links.isEmpty()) return
         cache[key] = CachedStreamEntry(
-            timestamp = System.currentTimeMillis(),
+            timestamp = timestampMs,
             links = links
         )
     }

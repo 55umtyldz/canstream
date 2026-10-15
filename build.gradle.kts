@@ -4,6 +4,15 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinJvmCompile
 
 buildscript {
+    dependencyLocking {
+        lockAllConfigurations()
+        lockMode = LockMode.STRICT
+    }
+
+    configurations.classpath {
+        resolutionStrategy.activateDependencyLocking()
+    }
+
     repositories {
         google()
         mavenCentral()
@@ -22,6 +31,11 @@ allprojects {
         google()
         mavenCentral()
         maven("https://jitpack.io")
+    }
+
+    dependencyLocking {
+        lockAllConfigurations()
+        lockMode = LockMode.STRICT
     }
 }
 

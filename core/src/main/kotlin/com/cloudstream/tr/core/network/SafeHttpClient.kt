@@ -2,14 +2,51 @@ package com.cloudstream.tr.core.network
 
 import com.lagradost.cloudstream3.app
 import com.lagradost.nicehttp.NiceResponse
-import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.ConcurrentHashMap
+
+/** Shares one in-flight value without tying its lifetime to a waiter's Job. */
+internal class InFlightRequestDeduplicator<K, T> {
+    private val inFlight = ConcurrentHashMap<K, CompletableDeferred<T>>()
+
+    suspend fun execute(key: K, fetch: suspend () -> T): T {
+        val candidate = CompletableDeferred<T>()
+        val existing = inFlight.putIfAbsent(key, candidate)
+        val result = existing ?: candidate
+        val ownsRequest = existing == null
+
+        if (ownsRequest) {
+            try {
+                result.complete(fetch())
+            } catch (error: Throwable) {
+                result.completeExceptionally(error)
+                throw error
+            } finally {
+                inFlight.remove(key, result)
+            }
+        }
+        return result.await()
+    }
+}
+
+internal data class GetRequestKey(val url: String, val headers: Map<String, String>, val cacheTime: Int)
+
+internal suspend fun <T> safeHttpCall(
+    request: suspend () -> T,
+    onFailure: (Exception) -> Unit
+): T? {
+    return try {
+        request()
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        onFailure(error)
+        null
+    }
+}
 
 /**
  * SafeHttpClient provides resilient networking for CloudStreamTR providers:
@@ -20,8 +57,7 @@ import java.util.concurrent.ConcurrentHashMap
 object SafeHttpClient {
     const val DEFAULT_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 
-    private val inFlightRequests = ConcurrentHashMap<String, Deferred<NiceResponse>>()
-    private val mutex = Mutex()
+    private val requests = InFlightRequestDeduplicator<GetRequestKey, NiceResponse>()
 
     fun defaultHeaders(referer: String? = null, isAjax: Boolean = false): Map<String, String> {
         val map = mutableMapOf(
@@ -40,29 +76,19 @@ object SafeHttpClient {
 
     /**
      * Executes an HTTP GET request with in-flight deduplication.
-     * If another coroutine is already fetching this exact URL, awaits the same result.
+     * If another coroutine is already fetching this URL with the same headers and cache time,
+     * awaits the same result.
      */
     suspend fun getDedup(
         url: String,
         headers: Map<String, String> = emptyMap(),
         cacheTime: Int = 0
-    ): NiceResponse = coroutineScope {
-        val key = "GET:$url"
-        val deferred = mutex.withLock {
-            inFlightRequests.getOrPut(key) {
-                async {
-                    try {
-                        val mergedHeaders = defaultHeaders().toMutableMap().apply { putAll(headers) }
-                        app.get(url, headers = mergedHeaders, cacheTime = cacheTime)
-                    } finally {
-                        mutex.withLock {
-                            inFlightRequests.remove(key)
-                        }
-                    }
-                }
-            }
+    ): NiceResponse {
+        val mergedHeaders = defaultHeaders().toMutableMap().apply { putAll(headers) }
+        val key = GetRequestKey(url, mergedHeaders.toMap(), cacheTime)
+        return requests.execute(key) {
+            app.get(url, headers = mergedHeaders, cacheTime = cacheTime)
         }
-        deferred.await()
     }
 
     /**
@@ -73,10 +99,10 @@ object SafeHttpClient {
         headers: Map<String, String> = emptyMap(),
         provider: String = "Generic"
     ): NiceResponse? {
-        return try {
+        return safeHttpCall(request = {
             val mergedHeaders = defaultHeaders().toMutableMap().apply { putAll(headers) }
             app.get(url, headers = mergedHeaders)
-        } catch (e: Exception) {
+        }) { e ->
             com.cloudstream.tr.core.diagnostics.DiagnosticLogger.log(
                 provider = provider,
                 stage = com.cloudstream.tr.core.diagnostics.DiagnosticStage.DOMAIN,
@@ -85,7 +111,6 @@ object SafeHttpClient {
                 url = url,
                 throwable = e
             )
-            null
         }
     }
 
@@ -99,7 +124,7 @@ object SafeHttpClient {
         jsonString: String? = null,
         provider: String = "Generic"
     ): NiceResponse? {
-        return try {
+        return safeHttpCall(request = {
             val mergedHeaders = defaultHeaders().toMutableMap().apply { putAll(headers) }
             if (jsonString != null) {
                 val mediaType = "application/json; charset=utf-8".toMediaTypeOrNull()
@@ -108,7 +133,7 @@ object SafeHttpClient {
             } else {
                 app.post(url, headers = mergedHeaders, data = data)
             }
-        } catch (e: Exception) {
+        }) { e ->
             com.cloudstream.tr.core.diagnostics.DiagnosticLogger.log(
                 provider = provider,
                 stage = com.cloudstream.tr.core.diagnostics.DiagnosticStage.DOMAIN,
@@ -117,7 +142,6 @@ object SafeHttpClient {
                 url = url,
                 throwable = e
             )
-            null
         }
     }
 }

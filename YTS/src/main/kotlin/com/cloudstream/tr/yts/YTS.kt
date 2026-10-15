@@ -33,7 +33,7 @@ class YTS : MainAPI() {
         "${mainUrl}/api/v2/list_movies.json?quality=2160p" to "4K Ultra HD Filmler"
     )
 
-    private fun parseMovie(m: YtsMovie): SearchResponse? {
+    internal fun parseMovie(m: YtsMovie): SearchResponse? {
         val title = m.title ?: return null
         val id = m.id ?: return null
         val poster = m.mediumCoverImage ?: m.largeCoverImage

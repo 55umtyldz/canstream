@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
 
@@ -39,8 +39,18 @@ jobs:
           echo "Determined BASE_SHA: $BASE_SHA"
           python tools/verify_version_bumps.py --base "$BASE_SHA"
 
+      - name: Set up Python for offline tool tests
+        uses: actions/setup-python@e797f83bcb11b83ae66e0230d6156d7c80228e7c # v6
+        with:
+          python-version: '3.11'
+
+      - name: Run upstream intelligence Git-fixture tests
+        run: |
+          python -m pip install 'pytest>=7.0.0'
+          python -m pytest -q tools/tests/test_upstream_intelligence.py
+
       - name: Set up JDK 17 with Gradle Cache
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@5d7b2146334bacf88728daaa70414a99f5164e0f # v5
         with:
           distribution: 'temurin'
           java-version: '17'
