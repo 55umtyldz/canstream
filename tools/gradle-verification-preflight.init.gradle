@@ -1,0 +1,69 @@
+// Read-only dependency preflight. No compilation or package publication.
+// Resolve binary artifacts strictly where Android Gradle Plugin (AGP) permits.
+// AGP unit-test classpaths need task-supplied artifact type attributes: resolving
+// their raw .files here selects ambiguous variants of the *same project*.
+// Resolve their dependency graphs here; CI's mandatory testDebugUnitTest task
+// verifies actual unit-test artifacts in Gradle's normal strict mode.
+gradle.projectsEvaluated {
+    gradle.rootProject.tasks.register('verifyDependencyMetadataPreflight') {
+        group = 'verification'
+        description = 'Resolve selected Android and Kotlin dependency classpaths with strict checksum verification'
+        doLast {
+            def configsToCheck = [
+                'debugCompileClasspath', 'debugRuntimeClasspath',
+                'debugUnitTestCompileClasspath', 'debugUnitTestRuntimeClasspath',
+                'releaseCompileClasspath', 'releaseRuntimeClasspath',
+                'kotlinCompilerClasspath', 'kotlinBuildToolsApiClasspath',
+                'androidApis'
+            ]
+            def graphOnlyConfigurations = [
+                'debugUnitTestCompileClasspath', 'debugUnitTestRuntimeClasspath'
+            ] as Set
+            def failures = []
+            int checked = 0
+            int graphsOnly = 0
+            int artifactChecks = 0
+            gradle.rootProject.allprojects.sort { it.path }.each { p ->
+                configsToCheck.each { configName ->
+                    def configuration = p.configurations.findByName(configName)
+                    if (configuration != null && configuration.canBeResolved) {
+                        checked++
+                        try {
+                            if (graphOnlyConfigurations.contains(configName)) {
+                                // AGP applies artifactType selection during test tasks, not
+                                // during arbitrary configuration.files resolution.
+                                configuration.incoming.resolutionResult.allComponents.size()
+                                graphsOnly++
+                                logger.lifecycle('Resolved dependency graph {}:{} (artifact verification deferred to testDebugUnitTest)', p.path, configName)
+                            } else {
+                                // Strictly verify resolved artifact bytes, not only names.
+                                configuration.files.size()
+                                artifactChecks++
+                                logger.lifecycle('Verified dependency artifacts {}:{}', p.path, configName)
+                            }
+                        } catch (Exception exception) {
+                            // Show nested causes in the CI console, not just Gradle's
+                            // generic "Could not resolve all files" outer exception.
+                            def chain = []
+                            def cursor = exception
+                            while (cursor != null && chain.size() < 6) {
+                                def message = cursor.message?.readLines()?.find { it?.trim() }?.trim()
+                                if (message && !chain.contains(message)) chain.add(message)
+                                cursor = cursor.cause
+                            }
+                            failures.add("${p.path}:${configName}: ${chain.join(' <- ')}")
+                            logger.error('Dependency preflight resolution failure {}:{}', p.path, configName, exception)
+                        }
+                    }
+                }
+            }
+            if (checked == 0) {
+                throw new GradleException('No expected Android dependency configurations were found')
+            }
+            if (!failures.empty) {
+                throw new GradleException("Dependency preflight failed in ${failures.size()} / ${checked} configurations:\n" + failures.join('\n'))
+            }
+            logger.lifecycle('Strict dependency preflight passed: {} configurations checked ({} artifact checks, {} graph checks; unit-test artifact checks run in testDebugUnitTest).', checked, artifactChecks, graphsOnly)
+        }
+    }
+}
