@@ -43,6 +43,9 @@ jobs:
           echo "Determined BASE_SHA: $BASE_SHA"
           python src/tools/verify_version_bumps.py --base "$BASE_SHA"
 
+      - name: Check Dependency Verification Gate Tooling
+        run: python3 -m unittest discover -s src/tools/tests -p 'test_dependency_verification_gate.py'
+
       - name: Set up JDK 17 with Gradle Cache
         uses: actions/setup-java@5d7b2146334bacf88728daaa70414a99f5164e0f # v5
         with:
@@ -50,6 +53,26 @@ jobs:
           java-version: '17'
           cache: 'gradle'
           cache-dependency-path: 'src/**/*.gradle*'
+
+      # A clean dependency resolver catches missing POM/.module checksums before
+      # Kotlin compile, plugin packaging and (on main) any publication begins.
+      - name: Dependency Verification Gate (fresh Gradle home)
+        env:
+          GRADLE_USER_HOME: ${{ runner.temp }}/cloudstream-dependency-verification
+        run: |
+          cd src/
+          bash tools/run_dependency_verification_gate.sh
+
+      - name: Upload Dependency Verification Diagnostics (on failure)
+        if: failure()
+        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4
+        with:
+          name: dependency-verification-${{ github.run_id }}-build
+          path: |
+            src/dependency-verification-report/
+            src/build/reports/dependency-verification/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Run Provider Unit Tests
         run: |

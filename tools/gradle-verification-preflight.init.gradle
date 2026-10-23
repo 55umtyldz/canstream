@@ -1,0 +1,43 @@
+// Read-only runtime checksum verification. No compilation or package publication.
+// Gradle's --write-verification-metadata scans all resolvable configurations;
+// this second strict pass actually verifies artifact bytes against approved hashes.
+gradle.projectsEvaluated {
+    gradle.rootProject.tasks.register('verifyDependencyMetadataPreflight') {
+        group = 'verification'
+        description = 'Resolve selected Android and Kotlin dependency classpaths with strict checksum verification'
+        doLast {
+            def configsToCheck = [
+                'debugCompileClasspath', 'debugRuntimeClasspath',
+                'debugUnitTestCompileClasspath', 'debugUnitTestRuntimeClasspath',
+                'releaseCompileClasspath', 'releaseRuntimeClasspath',
+                'kotlinCompilerClasspath', 'kotlinBuildToolsApiClasspath',
+                'androidApis'
+            ]
+            def failures = []
+            int checked = 0
+            gradle.rootProject.allprojects.sort { it.path }.each { p ->
+                configsToCheck.each { configName ->
+                    def configuration = p.configurations.findByName(configName)
+                    if (configuration != null && configuration.canBeResolved) {
+                        checked++
+                        try {
+                            // Force both graph and artifact files, not just dependency names.
+                            configuration.files.size()
+                            logger.lifecycle('Verified dependency configuration {}:{}', p.path, configName)
+                        } catch (Exception exception) {
+                            failures.add("${p.path}:${configName}: ${exception.message}")
+                            logger.error('Dependency verification preflight failure {}:{}', p.path, configName, exception)
+                        }
+                    }
+                }
+            }
+            if (checked == 0) {
+                throw new GradleException('No expected Android dependency configurations were found')
+            }
+            if (!failures.empty) {
+                throw new GradleException("Strict dependency verification failed in ${failures.size()} / ${checked} configurations:\n" + failures.join('\n'))
+            }
+            logger.lifecycle('Strict dependency verification passed: {} configurations resolved.', checked)
+        }
+    }
+}
