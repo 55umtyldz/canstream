@@ -77,6 +77,16 @@ class GateTests(unittest.TestCase):
                                          '<verify-signatures>true</verify-signatures>'))
         self.assertEqual('POLICY_CHANGE', compare(old, new)[0][0])
 
+    def test_android_unit_test_graph_preflight_avoids_ambiguous_artifact_selection(self):
+        # AGP unit test variants require attributes assigned by Android test tasks.
+        script = (Path(__file__).resolve().parents[1] / 'gradle-verification-preflight.init.gradle').read_text(encoding='utf-8')
+        self.assertIn('graphOnlyConfigurations', script)
+        self.assertIn("'debugUnitTestCompileClasspath', 'debugUnitTestRuntimeClasspath'", script)
+        self.assertIn('configuration.incoming.resolutionResult.allComponents.size()', script)
+        self.assertIn('if (graphOnlyConfigurations.contains(configName))', script)
+        self.assertIn('configuration.files.size()', script)
+        self.assertIn('testDebugUnitTest', script)
+
     def test_candidate_removal_is_detected(self):
         old = self.read(fixture())
         new = self.read(fixture(group='elsewhere'))

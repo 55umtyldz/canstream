@@ -54,7 +54,7 @@ strict_status=$?
 set -e
 if (( strict_status != 0 )); then
     tail -n 160 "$report_dir/gradle-strict.log"
-    echo 'FAIL: Strict Gradle checksum verification failed. Inspect gradle-strict.log and Gradle HTML verification report.' | tee "$report_dir/strict-status.md"
+    echo 'FAIL: Strict Gradle preflight could not resolve all selected dependency configurations. Inspect gradle-strict.log for nested causes and any Gradle verification report.' | tee "$report_dir/strict-status.md"
     exit "$strict_status"
 fi
 
