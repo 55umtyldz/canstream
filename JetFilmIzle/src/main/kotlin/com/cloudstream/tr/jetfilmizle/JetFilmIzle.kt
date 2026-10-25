@@ -13,7 +13,7 @@ import java.net.URI
 import com.cloudstream.tr.core.network.SafeHttpClient
 
 class JetFilmIzle : MainAPI() {
-    override var mainUrl = "https://jetfilmizle.now"
+    override var mainUrl = "https://jetfilmizle.app"
     override var name = "JetFilmIzle"
     override val hasMainPage = true
     override var lang = "tr"
@@ -189,7 +189,10 @@ class JetFilmIzle : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
-        val doc = app.get(data).document
+        val pageResponse = app.get(data)
+        val doc = pageResponse.document
+        val pageCookies = pageResponse.cookies
+        val cookieHeader = pageCookies.entries.joinToString("; ") { "${it.key}=${it.value}" }
         val origin = URI(data).let { "${it.scheme}://${it.authority}" }
         // The null candidate handles pages with inline players; other candidates are the public source tabs.
         val candidates: List<Map<String, String>?> = listOf(null) + playerRequests(doc)
@@ -198,17 +201,26 @@ class JetFilmIzle : MainAPI() {
             maxConcurrency = 4,
             provider = name,
             resolver = { form, emitLink ->
-                val playerDoc = if (form == null) doc else app.post(
-                    "$origin/jetplayer",
-                    data = form,
-                    headers = mapOf(
+                val playerDoc = if (form == null) {
+                    doc
+                } else {
+                    val postHeaders = mutableMapOf(
                         "Referer" to data,
                         "Origin" to origin,
                         "X-Requested-With" to "XMLHttpRequest",
                         "User-Agent" to SafeHttpClient.DEFAULT_USER_AGENT
-                    ),
-                    timeout = 10
-                ).document
+                    )
+                    if (cookieHeader.isNotBlank()) {
+                        postHeaders["Cookie"] = cookieHeader
+                    }
+                    app.post(
+                        "$origin/jetplayer",
+                        data = form,
+                        headers = postHeaders,
+                        cookies = pageCookies,
+                        timeout = 10
+                    ).document
+                }
                 resolvePlayerDocument(playerDoc, data, subtitleCallback, emitLink)
             },
             onLinkFound = callback

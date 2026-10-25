@@ -202,6 +202,25 @@ class Dizilla : MainAPI() {
         }
 
         if (episodes.isEmpty()) {
+            val html = doc.html()
+            val rscEpMatches = Regex("""https?://dizilla\.now/([a-zA-Z0-9_-]*(\d+)-sezon-(\d+)-bolum[a-zA-Z0-9_-]*)""").findAll(html)
+            val seenEps = mutableSetOf<String>()
+            for (m in rscEpMatches) {
+                val epHref = fixUrl(m.value.replace("\\", ""))
+                if (!seenEps.add(epHref)) continue
+                val seasonNum = m.groupValues[2].toIntOrNull() ?: 1
+                val epNum = m.groupValues[3].toIntOrNull() ?: 1
+                episodes.add(
+                    newEpisode(epHref) {
+                        this.name = "${seasonNum}. Sezon ${epNum}. Bölüm"
+                        this.season = seasonNum
+                        this.episode = epNum
+                    }
+                )
+            }
+        }
+
+        if (episodes.isEmpty()) {
             for (a in doc.select("a[href*='-sezon-']")) {
                 val epHref = fixUrlNull(a.attr("href")) ?: continue
                 val epText = a.text().trim()
@@ -288,6 +307,16 @@ class Dizilla : MainAPI() {
                 } catch (e: Exception) {
                     // ignore
                 }
+            }
+        }
+
+        val html = doc.html()
+        val pichiveMatches = Regex("""https?://[^\s"'\\]*(?:pichive|four\.pichive)[^\s"'\\]*""").findAll(html)
+        for (m in pichiveMatches) {
+            val raw = m.value.replace("""\/""", "/").replace("\\", "").trim()
+            if (raw.isNotBlank()) {
+                val fullUrl = if (raw.startsWith("http")) raw else "https://${raw.removePrefix("//")}"
+                iframes.add(fullUrl)
             }
         }
 

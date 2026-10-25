@@ -192,7 +192,8 @@ def parse_detail_page(
         # Exclude non-episode pages that contain words like 'sezon' or 'bolum'
         if any(bad in low for bad in [
             "yakinda", "yeni-sezon-animeleri", "sezon-animeleri", "kategori",
-            "category", "genre", "tur/", "etiket", "tag", "facebook", "twitter", "#"
+            "category", "genre", "tur/", "etiket", "tag", "facebook", "twitter", "#",
+            "tum-bolumler", "tum-bolum"
         ]):
             return False
         return True
@@ -236,11 +237,18 @@ def parse_detail_page(
                 continue
             for tag in soup.select(sel):
                 href = tag.get("href") or tag.get("data-href")
-                if not href and tag.get("onclick"):
-                    # Extract from onclick (e.g., IndexIcerik('...'))
+                if (not href or href in ("#", "javascript:;", "javascript:void(0)", "javascript:void(0);")) and tag.get("onclick"):
+                    # Extract from onclick (e.g., IndexIcerik('...') or diziGetir('...'))
                     m = re.search(r"'(ajax/[^']+)'", tag.get("onclick"))
                     if m:
                         href = m.group(1)
+                    else:
+                        m_dg = re.search(r"diziGetir\('([^']+)',\s*'([^']+)'", tag.get("onclick"))
+                        if m_dg:
+                            id_val, ic1_val = m_dg.group(1), m_dg.group(2)
+                            src_map = {'0': 'new5', '2': 'new1', '5': 'new4', '3': 'new2', '4': 'new3'}
+                            f_val = src_map.get(ic1_val, 'new5')
+                            href = f"/video/data/{f_val}.php?id={id_val}&sira=1"
 
                 if href and "ajax/bolumler" not in href:
                     abs_href = urljoin(base_url, href)
@@ -269,6 +277,17 @@ def parse_detail_page(
             if result["episodeLinks"]:
                 result["episodeDiscoveryMode"] = "GENERIC_FALLBACK"
                 break
+
+    # 4. FALLBACK: Next.js RSC stream episode URLs
+    if not result["episodeLinks"]:
+        rsc_eps = re.findall(r'https?://[^\s"\'\\]+/[a-zA-Z0-9_-]*\d+-sezon-\d+-bolum[a-zA-Z0-9_-]*', html_body)
+        for ep_u in rsc_eps:
+            clean_u = ep_u.replace("\\", "")
+            if clean_u not in seen_eps and is_valid_episode_url(clean_u):
+                seen_eps.add(clean_u)
+                result["episodeLinks"].append(clean_u)
+        if result["episodeLinks"]:
+            result["episodeDiscoveryMode"] = "RSC_STREAM"
 
     return result
 
@@ -299,8 +318,8 @@ def evaluate_player_discovery(html_body: str, base_url: str) -> Tuple[str, Dict[
         src = ifr.get("src") or ifr.get("data-src") or ifr.get("data-lazy-src")
         if src:
             abs_src = urljoin(base_url, src)
-            # Filter out non-video ads/analytics and trailer iframes
-            if not any(ign in abs_src.lower() for ign in ["google", "recaptcha", "analytics", "disqus", "ads", "youtube.com", "youtu.be"]):
+            # Filter out non-video ads/analytics and trailer iframes (allow drive.google.com video embeds)
+            if not any(ign in abs_src.lower() for ign in ["google.com/recaptcha", "googleads", "googletagmanager", "google-analytics", "recaptcha", "analytics", "disqus", "doubleclick", "ads", "youtube.com", "youtu.be"]):
                 info["iframes"].append(XhrRedactor.sanitize_url(abs_src))
 
     # 2. Inspect HTML5 Video elements
@@ -322,7 +341,7 @@ def evaluate_player_discovery(html_body: str, base_url: str) -> Tuple[str, Dict[
     body_without_scx = re.sub(r'var\s+scx\s*=\s*(\{.+?\});', '', body_str, flags=re.DOTALL | re.IGNORECASE)
     has_player_code = bool(
         re.search(r'(?:jwplayer|videojs|Playerjs)\s*\(', body_without_scx, re.IGNORECASE) or
-        any(host in body_without_scx.lower() for host in ["vidpapi", "closeload", "rapidrame", "streamtape", "doodstream", "vidsrc", "superembed"]) or
+        any(host in body_without_scx.lower() for host in ["vidpapi", "closeload", "rapidrame", "streamtape", "doodstream", "vidsrc", "superembed", "pichive"]) or
         re.search(r'(?:file|source)\s*:\s*["\']https?://[^"\']+\.(?:m3u8|mp4)', body_without_scx, re.IGNORECASE)
     )
     # Star TV mounts its public Dyg player after hydration. A container alone
@@ -365,6 +384,30 @@ def evaluate_player_discovery(html_body: str, base_url: str) -> Tuple[str, Dict[
                     info["hasPlayerScript"] = True
             except Exception:
                 pass
+
+    # 6. SetFilmIzle AJAX player check
+    if not (info["iframes"] or info["videos"] or info["mediaUrls"] or has_player_code):
+        if "stfPlayer" in body_str and "data-post-id" in body_str:
+            m_post = re.search(r'data-post-id=["\'](\d+)["\']', body_str)
+            m_nonce = re.search(r'video\s*:\s*["\']([^"\']+)["\']', body_str)
+            if m_post and m_nonce:
+                info["hasPlayerScript"] = True
+                info["iframes"].append(f"https://www.setfilmizle.ltd/wp-admin/admin-ajax.php?action=get_video_url&post_id={m_post.group(1)}")
+
+        # 7. WebDramaTurkey / button data-embed check
+        if "data-embed=" in body_str:
+            info["hasPlayerScript"] = True
+            info["iframes"].append("ajax_data_embed_source")
+
+        # 8. JetFilmIzle AJAX player check (jetplayer + player-source-btn)
+        if "player-source-btn" in body_str and ('name="film_id"' in body_str or "film_id" in body_str):
+            info["hasPlayerScript"] = True
+            info["iframes"].append(f"{base_url.rstrip('/')}/jetplayer")
+
+        # 9. SezonlukDizi AJAX player check (dataAlternatif / dilsec data-id)
+        if ("dataAlternatif" in body_str or "dilsec" in body_str) and ("data-id=" in body_str):
+            info["hasPlayerScript"] = True
+            info["iframes"].append(f"{base_url.rstrip('/')}/ajax/dataEmbed22.asp")
 
     if info["iframes"] or info["videos"] or info["mediaUrls"] or has_player_code:
         return "PLAYER_DISCOVERED", info

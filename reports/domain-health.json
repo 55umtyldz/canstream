@@ -43,13 +43,13 @@
   },
   {
     "provider": "Animeler",
-    "canonical": "https://animeler.pw",
-    "finalUrl": "https://animeler.pw",
+    "canonical": "https://animeler.live",
+    "finalUrl": "https://animeler.live",
     "httpsValid": true,
     "hostAllowed": true,
     "markerFound": true,
     "redirectChain": [
-      "https://animeler.pw"
+      "https://animeler.live"
     ],
     "candidateHost": null,
     "status": "healthy",
@@ -127,7 +127,7 @@
   },
   {
     "provider": "DiziPal",
-    "canonical": "https://dizipal1430.com",
+    "canonical": "https://dizipalorjinal7.com",
     "finalUrl": null,
     "httpsValid": false,
     "hostAllowed": false,
@@ -152,14 +152,16 @@
   {
     "provider": "BelgeselX",
     "canonical": "https://belgeselx.com",
-    "finalUrl": null,
-    "httpsValid": false,
-    "hostAllowed": false,
-    "markerFound": false,
-    "redirectChain": [],
+    "finalUrl": "https://belgeselx.com",
+    "httpsValid": true,
+    "hostAllowed": true,
+    "markerFound": true,
+    "redirectChain": [
+      "https://belgeselx.com"
+    ],
     "candidateHost": null,
-    "status": "dead",
-    "error": "Provider marked as dead in domains.json"
+    "status": "healthy",
+    "error": null
   },
   {
     "provider": "FilmMakinesi",
@@ -170,6 +172,20 @@
     "markerFound": true,
     "redirectChain": [
       "https://filmmakinesi.to"
+    ],
+    "candidateHost": null,
+    "status": "healthy",
+    "error": null
+  },
+  {
+    "provider": "FourKHDHub",
+    "canonical": "https://4khdhub.one",
+    "finalUrl": "https://4khdhub.one",
+    "httpsValid": true,
+    "hostAllowed": true,
+    "markerFound": true,
+    "redirectChain": [
+      "https://4khdhub.one"
     ],
     "candidateHost": null,
     "status": "healthy",
@@ -205,7 +221,7 @@
   },
   {
     "provider": "DiziMom",
-    "canonical": "https://www.dizimom.diy",
+    "canonical": "https://www.dizimom.beer",
     "finalUrl": null,
     "httpsValid": false,
     "hostAllowed": false,
@@ -245,13 +261,13 @@
   },
   {
     "provider": "JetFilmIzle",
-    "canonical": "https://jetfilmizle.now",
-    "finalUrl": "https://jetfilmizle.now",
+    "canonical": "https://jetfilmizle.app",
+    "finalUrl": "https://jetfilmizle.app",
     "httpsValid": true,
     "hostAllowed": true,
     "markerFound": true,
     "redirectChain": [
-      "https://jetfilmizle.now"
+      "https://jetfilmizle.app"
     ],
     "candidateHost": null,
     "status": "healthy",
@@ -295,14 +311,13 @@
   },
   {
     "provider": "CloudStreamHub",
-    "canonical": "https://api.themoviedb.org",
+    "canonical": "https://developer.themoviedb.org",
     "finalUrl": "https://developer.themoviedb.org/docs/getting-started",
     "httpsValid": true,
     "hostAllowed": true,
     "markerFound": true,
     "redirectChain": [
-      "https://api.themoviedb.org",
-      "https://www.themoviedb.org/documentation/api",
+      "https://developer.themoviedb.org",
       "https://developer.themoviedb.org/docs",
       "https://developer.themoviedb.org/docs/getting-started"
     ],
@@ -395,14 +410,17 @@
   {
     "provider": "Dizigecesi",
     "canonical": "https://dizigecesi.com",
-    "finalUrl": null,
-    "httpsValid": false,
-    "hostAllowed": false,
-    "markerFound": false,
-    "redirectChain": [],
+    "finalUrl": "https://dizigecesi.com/tr",
+    "httpsValid": true,
+    "hostAllowed": true,
+    "markerFound": true,
+    "redirectChain": [
+      "https://dizigecesi.com",
+      "https://dizigecesi.com/tr"
+    ],
     "candidateHost": null,
-    "status": "dead",
-    "error": "Provider marked as dead in domains.json"
+    "status": "healthy",
+    "error": null
   },
   {
     "provider": "RareFilmm",
@@ -431,14 +449,43 @@
     "error": "Provider marked as dead in domains.json"
   },
   {
-    "provider": "YTS",
-    "canonical": "https://yts.gg/home",
-    "finalUrl": "https://yts.gg/home",
+    "provider": "StarTV",
+    "canonical": "https://www.startv.com.tr",
+    "finalUrl": "https://www.startv.com.tr",
     "httpsValid": true,
     "hostAllowed": true,
     "markerFound": true,
     "redirectChain": [
-      "https://yts.gg/home"
+      "https://www.startv.com.tr"
+    ],
+    "candidateHost": null,
+    "status": "healthy",
+    "error": null
+  },
+  {
+    "provider": "DiziIzle",
+    "canonical": "https://www.diziizle.you",
+    "finalUrl": "https://www.diziizle.you",
+    "httpsValid": true,
+    "hostAllowed": true,
+    "markerFound": true,
+    "redirectChain": [
+      "https://www.diziizle.you"
+    ],
+    "candidateHost": null,
+    "status": "healthy",
+    "error": null
+  },
+  {
+    "provider": "YTS",
+    "canonical": "https://yts.gg",
+    "finalUrl": "https://web.yts.gg/",
+    "httpsValid": true,
+    "hostAllowed": true,
+    "markerFound": true,
+    "redirectChain": [
+      "https://yts.gg",
+      "https://web.yts.gg/"
     ],
     "candidateHost": null,
     "status": "healthy",

@@ -152,8 +152,18 @@ object YtsResolver {
             val codecStr = t.videoCodec?.let { " $it" } ?: ""
             val sizeStr = t.size?.let { " [$it]" } ?: ""
             val seedCount = t.seeds
+            val effectiveMinSeeds = if (hasDebrid) 0 else DebridConfig.minSeeds
+            if (seedCount != null && seedCount < effectiveMinSeeds) return@mapNotNull null
 
-            if (!hasDebrid && seedCount != null && seedCount < 3) return@mapNotNull null
+            if (DebridConfig.maxTorrentSizeGb > 0 && !t.size.isNullOrBlank()) {
+                val sizeVal = t.size
+                val sizeGb = if (sizeVal.contains("MB", ignoreCase = true)) {
+                    (sizeVal.replace(Regex("""[^\d\.]"""), "").toDoubleOrNull() ?: 0.0) / 1024.0
+                } else {
+                    sizeVal.replace(Regex("""[^\d\.]"""), "").toDoubleOrNull() ?: 0.0
+                }
+                if (sizeGb > DebridConfig.maxTorrentSizeGb) return@mapNotNull null
+            }
 
             val seedStr = if (seedCount == null) " (seeds unknown)" else " ($seedCount seeds)"
             val displayName = "YTS $qStr$codecStr$sizeStr$seedStr".trim()

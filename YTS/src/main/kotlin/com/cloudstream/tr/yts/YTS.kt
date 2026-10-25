@@ -1,5 +1,6 @@
 package com.cloudstream.tr.yts
 
+import com.cloudstream.tr.core.resolvers.SubtitlesResolver
 import com.cloudstream.tr.core.resolvers.YtsMovie
 import com.cloudstream.tr.core.resolvers.YtsResolver
 import com.cloudstream.tr.core.resolvers.YtsResponse
@@ -98,6 +99,11 @@ class YTS : MainAPI() {
     ): Boolean {
         var linksFound = false
         if (data.isNotBlank()) {
+            SubtitlesResolver.resolveTurkishSubtitles(
+                imdbId = data,
+                isMovie = true,
+                callback = subtitleCallback
+            )
             val links = YtsResolver.resolve(imdbId = data, isMovie = true)
             for (link in links) {
                 callback(link)

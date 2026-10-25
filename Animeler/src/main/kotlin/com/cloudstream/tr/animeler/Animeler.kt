@@ -8,7 +8,7 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 
 class Animeler : MainAPI() {
-    override var mainUrl = "https://animeler.pw"
+    override var mainUrl = "https://animeler.live"
     override var name = "Animeler"
     override val hasMainPage = true
     override var lang = "tr"

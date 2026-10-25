@@ -61,8 +61,8 @@ object FourKhubResolver {
                 val searchUrl = "$domain/?s=$encodedQuery"
                 val searchDoc = Jsoup.parse(app.get(searchUrl, timeout = 10).text)
 
-                // Extract articles / entries
-                val entries = searchDoc.select("article, div.post-item, div.entry-content, h2.entry-title a, a[href*='-movie-'], a[href*='-series-']")
+                // Extract articles / entries (support both legacy WP and new card-grid Tailwind layouts)
+                val entries = searchDoc.select("div.card-grid a, div.movie-card a, article, div.post-item, div.entry-content, h2.entry-title a, a[href*='-movie-'], a[href*='-series-']")
                 var matchedUrl: String? = null
 
                 for (entry in entries) {

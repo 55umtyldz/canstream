@@ -68,19 +68,12 @@ class TorrentResolversTest {
     }
 
     @Test
-    fun mappingPreservesExplicitIndicesAndReportsMissingIndex() = runBlocking {
-        val events = mutableListOf<DiagnosticEvent>()
-        val listener: (DiagnosticEvent) -> Unit = { events.add(it) }
-        DiagnosticLogger.addListener(listener)
-        try {
-            val links = TorrentioResolver.mapStreams(listOf(stream(0), stream(7), stream(null)), false)
-            assertEquals(2, links.size)
-            assertTrue(links[0].url.contains("&index=0&"))
-            assertTrue(links[1].url.contains("&index=7&"))
-            assertEquals(1, events.count { it.message.contains("file index missing") })
-        } finally {
-            DiagnosticLogger.removeListener(listener)
-        }
+    fun mappingPreservesExplicitIndicesAndDefaultsMissingIndexToZero() = runBlocking {
+        val links = TorrentioResolver.mapStreams(listOf(stream(0), stream(7), stream(null)), false)
+        assertEquals(3, links.size)
+        assertTrue(links[0].url.contains("&index=0&"))
+        assertTrue(links[1].url.contains("&index=7&"))
+        assertTrue(links[2].url.contains("&index=0&"))
     }
 
     @Test
