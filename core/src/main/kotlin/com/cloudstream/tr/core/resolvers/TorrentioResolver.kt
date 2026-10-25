@@ -116,10 +116,20 @@ object TorrentioResolver {
 
             val seedCount = reportedSeeds(rawTitle)
             val isDirectUrl = stream.url?.let { it.startsWith("https://", true) || it.startsWith("http://", true) } == true
-            if (!hasDebrid && !isDirectUrl && seedCount != null && seedCount < 3) return@mapNotNull null
+            val effectiveMinSeeds = if (hasDebrid || isDirectUrl) 0 else DebridConfig.minSeeds
+            if (seedCount != null && seedCount < effectiveMinSeeds) return@mapNotNull null
 
             val sizeMatch = Regex("""\b(\d+(?:\.\d+)?\s*[GgMm]B)\b""").find(rawTitle)
             val size = sizeMatch?.groupValues?.get(1) ?: ""
+
+            if (DebridConfig.maxTorrentSizeGb > 0 && size.isNotBlank()) {
+                val sizeGb = if (size.contains("MB", ignoreCase = true)) {
+                    (size.replace(Regex("""[^\d\.]"""), "").toDoubleOrNull() ?: 0.0) / 1024.0
+                } else {
+                    size.replace(Regex("""[^\d\.]"""), "").toDoubleOrNull() ?: 0.0
+                }
+                if (sizeGb > DebridConfig.maxTorrentSizeGb) return@mapNotNull null
+            }
 
             val mappedQuality = qualityOf(stream.title, stream.behaviorHints?.filename, stream.name)
             val resolution = if (mappedQuality == Qualities.Unknown.value) "Unknown" else "${mappedQuality}p"
@@ -152,10 +162,11 @@ object TorrentioResolver {
             val displayName = "$prefixStr$resolution$tags ${if (size.isNotBlank()) "[$size] " else ""}$seedStr".trim()
 
             if (isDirectUrl) {
+                val directUrl = stream.url
                 return@mapNotNull com.lagradost.cloudstream3.utils.newExtractorLink(
                     source = "Torrentio",
                     name = displayName,
-                    url = stream.url ?: return@mapNotNull null,
+                    url = directUrl,
                     type = ExtractorLinkType.VIDEO
                 ) {
                     this.quality = mappedQuality
@@ -168,16 +179,18 @@ object TorrentioResolver {
             val cleanTitle = stream.behaviorHints?.filename?.takeIf { it.isNotBlank() } ?: sanitizedTitle
             val encodedTitle = URLEncoder.encode(cleanTitle, "UTF-8")
 
-            // The first file of a multi-file feature is not necessarily the movie.
-            val fileIndex = stream.fileIdx
-            if (fileIndex == null || fileIndex < 0) {
+            // Torrentio omits fileIdx (null) for single-file torrents/movies; default to 0.
+            // Negative indices indicate invalid or unselectable files.
+            val rawFileIndex = stream.fileIdx
+            if (rawFileIndex != null && rawFileIndex < 0) {
                 DiagnosticLogger.log(
                     provider = "Torrentio", stage = DiagnosticStage.EXTRACTOR,
                     category = DiagnosticCategory.SOURCE_DISCOVERY,
-                    message = "Torrent candidate skipped: file index missing or invalid"
+                    message = "Torrent candidate skipped: file index invalid ($rawFileIndex)"
                 )
                 return@mapNotNull null
             }
+            val fileIndex = rawFileIndex ?: 0
             val magnetUrl = "magnet:?xt=urn:btih:$hash&dn=$encodedTitle&index=$fileIndex${TorrentTrackers.magnetParams(stream.sources.orEmpty())}"
 
             com.lagradost.cloudstream3.utils.newExtractorLink(

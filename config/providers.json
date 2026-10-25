@@ -77,7 +77,8 @@
         "stealthFallback": true,
         "contentType": "Documentary",
         "playerProbe": {
-          "mode": "detail"
+          "mode": "episode",
+          "episodeSelector": "a[onclick*='diziGetir']"
         },
         "search": {
           "method": "GET",
@@ -210,7 +211,8 @@
       "enabled": true,
       "language": "en",
       "types": [
-        "Movie"
+        "Movie",
+        "TvSeries"
       ],
       "domainKey": "FourKHDHub",
       "healthTier": "standard",
@@ -225,12 +227,13 @@
         "search": {
           "method": "GET",
           "path": "/?s={query}",
-          "expectedSelector": "article, div.post-item"
+          "expectedSelector": "div.card-grid a, a:has(.movie-card-content), article"
         },
         "homepage": {
           "selectors": [
-            "article",
-            "div.post-item"
+            "div.card-grid a",
+            "a:has(.movie-card-content)",
+            "div.movie-card-content"
           ],
           "requiredUrlPatterns": [
             "/"
@@ -241,6 +244,11 @@
             "/page/"
           ]
         }
+      },
+      "smokeTest": {
+        "searchQuery": "batman",
+        "knownDetail": "https://4khdhub.one/batman-movie-908/",
+        "expectedType": "Movie"
       }
     },
     {
@@ -676,7 +684,7 @@
         "contentType": "TvSeries",
         "playerProbe": {
           "mode": "episode",
-          "episodeSelector": "a[href*='-sezon-']"
+          "episodeSelector": "a[href*='-sezon-'], [href*='-sezon-']"
         },
         "search": {
           "method": "POST_FORM",
@@ -823,7 +831,7 @@
       "healthTier": "full",
       "smokeTest": {
         "searchQuery": "batman",
-        "knownDetail": "https://jetfilmizle.now/film/batman-ninja-vs-yakuza-league",
+        "knownDetail": "https://jetfilmizle.app/film/batman-ninja-vs-yakuza-league",
         "expectedType": "Movie"
       },
       "monitoring": {
@@ -841,6 +849,7 @@
         },
         "homepage": {
           "selectors": [
+            "div.card a",
             "article.movie a",
             "div.movie-item a"
           ],
@@ -1046,8 +1055,8 @@
       "domainKey": "DiziKorea",
       "healthTier": "standard",
       "smokeTest": {
-        "searchQuery": "love",
-        "knownDetail": "https://dizikorea3.com/dizi/flex-x-cop-izle-dq",
+        "searchQuery": "doctor",
+        "knownDetail": "https://dizikorea3.com/dizi/doctor-x-izle",
         "expectedType": "AsianDrama"
       },
       "monitoring": {
@@ -1057,7 +1066,7 @@
         "contentType": "AsianDrama",
         "playerProbe": {
           "mode": "episode",
-          "episodeSelector": "a[href*=\"/sezon-\"]"
+          "episodeSelector": "a[href*='/bolum-'], a[href*='/sezon-']"
         },
         "search": {
           "method": "GET",
@@ -1193,8 +1202,8 @@
       "domainKey": "Animeler",
       "healthTier": "standard",
       "smokeTest": {
-        "searchQuery": "naruto",
-        "knownDetail": "https://animeler.pw/steinsgate",
+        "searchQuery": "joe",
+        "knownDetail": "https://animeler.live/ashita-no-joe-2",
         "expectedType": "Anime"
       },
       "monitoring": {
@@ -1211,7 +1220,7 @@
           "path": "/filter?search={query}",
           "expectedSelector": "a.anime-card-modern, .anime-grid-modern a, a[href*=\"/naruto\"]",
           "headers": {
-            "Referer": "https://animeler.pw/"
+            "Referer": "https://animeler.live/"
           }
         },
         "homepage": {

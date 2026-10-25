@@ -44,11 +44,13 @@
       "status": "unsupported"
     },
     "Animeler": {
-      "canonical": "https://animeler.pw",
+      "canonical": "https://animeler.live",
       "allowedHosts": [
         "animeler.pw",
         "www.animeler.pw",
-        "animeler.me"
+        "animeler.me",
+        "animeler.live",
+        "www.animeler.live"
       ],
       "expectedMarkers": [
         "Animeler",
@@ -172,7 +174,7 @@
         "belgeselx"
       ],
       "lastChecked": null,
-      "status": "dead"
+      "status": "active"
     },
     "FilmMakinesi": {
       "canonical": "https://filmmakinesi.to",
@@ -276,13 +278,15 @@
       "status": "active"
     },
     "JetFilmIzle": {
-      "canonical": "https://jetfilmizle.now",
+      "canonical": "https://jetfilmizle.app",
       "allowedHosts": [
         "jetfilmizle.now",
         "www.jetfilmizle.now",
         "jetfilmizle.vip",
         "www.jetfilmizle.vip",
-        "jetfilmizle.top"
+        "jetfilmizle.top",
+        "jetfilmizle.app",
+        "www.jetfilmizle.app"
       ],
       "expectedMarkers": [
         "JetFilmIzle",
@@ -333,15 +337,17 @@
       "status": "dead"
     },
     "CloudStreamHub": {
-      "canonical": "https://api.themoviedb.org",
+      "canonical": "https://developer.themoviedb.org",
       "allowedHosts": [
+        "developer.themoviedb.org",
         "api.themoviedb.org",
         "image.tmdb.org",
-        "developer.themoviedb.org"
+        "themoviedb.org"
       ],
       "expectedMarkers": [
-        "CloudStreamHub",
-        "themoviedb"
+        "themoviedb",
+        "TMDB",
+        "developer"
       ],
       "lastChecked": null,
       "status": "active"
@@ -445,7 +451,7 @@
         "Dizi"
       ],
       "lastChecked": null,
-      "status": "dead"
+      "status": "active"
     },
     "RareFilmm": {
       "canonical": "https://rarefilmm.com",
@@ -495,8 +501,9 @@
         "diziizle.you"
       ],
       "expectedMarkers": [
-        "bl-liste",
-        "film-dizi"
+        "diziizle",
+        "Diziizle",
+        "Dizi"
       ],
       "lastChecked": null,
       "status": "active"

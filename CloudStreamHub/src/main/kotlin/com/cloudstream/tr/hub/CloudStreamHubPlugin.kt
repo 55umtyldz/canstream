@@ -16,6 +16,7 @@ import android.widget.Toast
 import android.view.Gravity
 import com.cloudstream.tr.core.diagnostics.DiagnosticLogger
 import com.cloudstream.tr.core.resolvers.DebridConfig
+import kotlinx.coroutines.launch
 import com.lagradost.cloudstream3.plugins.Plugin
 import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 
@@ -60,14 +61,83 @@ class CloudStreamHubPlugin : Plugin() {
             setText(DebridConfig.realDebridToken ?: "")
         }
 
+        val allDebridLabel = TextView(themedContext).apply {
+            text = "AllDebrid API Token (Opsiyonel):"
+            textSize = 14f
+            setPadding(0, 16, 0, 0)
+        }
+        val allDebridInput = EditText(themedContext).apply {
+            hint = "AllDebrid API Key giriniz..."
+            setText(DebridConfig.allDebridToken ?: "")
+        }
+
         val torboxLabel = TextView(themedContext).apply {
             text = "Torbox API Token (Opsiyonel):"
             textSize = 14f
-            setPadding(0, 20, 0, 0)
+            setPadding(0, 16, 0, 0)
         }
         val torboxInput = EditText(themedContext).apply {
             hint = "Torbox API Key giriniz..."
             setText(DebridConfig.torboxToken ?: "")
+        }
+
+        val torrServerLabel = TextView(themedContext).apply {
+            text = "TorrServer Adresi (P2P Torrent Oynatıcı):"
+            textSize = 14f
+            setPadding(0, 16, 0, 0)
+        }
+        val torrServerInput = EditText(themedContext).apply {
+            hint = "http://127.0.0.1:8080"
+            setText(DebridConfig.torrServerUrl)
+        }
+        val testTorrServerButton = Button(themedContext).apply {
+            text = "TorrServer Bağlantısını Test Et"
+            setOnClickListener {
+                val url = torrServerInput.text.toString().trim().ifBlank { "http://127.0.0.1:8080" }
+                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+                    val alive = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        DebridConfig.checkTorrServerAlive(url)
+                    }
+                    val msg = if (alive) "✓ TorrServer bağlantısı başarılı! ($url)" else "✗ TorrServer'a bağlanılamadı ($url). TorrServer uygulamasının açık olduğundan emin olun."
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        val minSeedsLabel = TextView(themedContext).apply {
+            text = "Minimum Seeder Filtresi (Ölü torrentleri engelleme):"
+            textSize = 14f
+            setPadding(0, 16, 0, 0)
+        }
+        val seedValues = listOf(1, 3, 5, 10, 20)
+        val seedLabels = listOf("1 Seeder (Tümü)", "3 Seeder (Önerilen)", "5 Seeder (Stabil)", "10 Seeder (Hızlı)", "20 Seeder (Çok Hızlı)")
+        val minSeedsSpinner = Spinner(themedContext).apply {
+            adapter = ArrayAdapter(themedContext, android.R.layout.simple_spinner_dropdown_item, seedLabels)
+            setSelection(seedValues.indexOf(DebridConfig.minSeeds).coerceAtLeast(1))
+        }
+
+        val maxSizeLabel = TextView(themedContext).apply {
+            text = "Maksimum Torrent Dosya Boyutu:"
+            textSize = 14f
+            setPadding(0, 16, 0, 0)
+        }
+        val sizeValues = listOf(0, 5, 10, 15, 25, 40)
+        val sizeLabels = listOf("Limitsiz (REMUX Dahil)", "Maksimum 5 GB", "Maksimum 10 GB", "Maksimum 15 GB", "Maksimum 25 GB", "Maksimum 40 GB")
+        val maxSizeSpinner = Spinner(themedContext).apply {
+            adapter = ArrayAdapter(themedContext, android.R.layout.simple_spinner_dropdown_item, sizeLabels)
+            setSelection(sizeValues.indexOf(DebridConfig.maxTorrentSizeGb).coerceAtLeast(0))
+        }
+
+        val audioPrefLabel = TextView(themedContext).apply {
+            text = "Ses ve Dublaj Tercihi:"
+            textSize = 14f
+            setPadding(0, 16, 0, 0)
+        }
+        val audioValues = listOf("ALL", "TR_DUB", "ORIGINAL")
+        val audioLabels = listOf("Tümü (Herhangi biri)", "Önce Türkçe Dublaj", "Orijinal / Altyazılı")
+        val audioPrefSpinner = Spinner(themedContext).apply {
+            adapter = ArrayAdapter(themedContext, android.R.layout.simple_spinner_dropdown_item, audioLabels)
+            setSelection(audioValues.indexOf(DebridConfig.audioPreference).coerceAtLeast(0))
         }
 
         val torrentCheck = CheckBox(themedContext).apply {
@@ -237,8 +307,19 @@ class CloudStreamHubPlugin : Plugin() {
         layout.addView(diagnosticsButton)
         layout.addView(rdLabel)
         layout.addView(rdInput)
+        layout.addView(allDebridLabel)
+        layout.addView(allDebridInput)
         layout.addView(torboxLabel)
         layout.addView(torboxInput)
+        layout.addView(torrServerLabel)
+        layout.addView(torrServerInput)
+        layout.addView(testTorrServerButton)
+        layout.addView(minSeedsLabel)
+        layout.addView(minSeedsSpinner)
+        layout.addView(maxSizeLabel)
+        layout.addView(maxSizeSpinner)
+        layout.addView(audioPrefLabel)
+        layout.addView(audioPrefSpinner)
         layout.addView(torrentCheck)
         layout.addView(cdnCheck)
 
@@ -254,9 +335,13 @@ class CloudStreamHubPlugin : Plugin() {
                     context = context,
                     rdToken = rdInput.text.toString(),
                     torbox = torboxInput.text.toString(),
+                    allDebrid = allDebridInput.text.toString(),
                     enableTorrents = torrentCheck.isChecked,
                     prioritizeCdn = cdnCheck.isChecked,
-                    audioPref = DebridConfig.audioPreference
+                    audioPref = audioValues[audioPrefSpinner.selectedItemPosition],
+                    minimumSeeds = seedValues[minSeedsSpinner.selectedItemPosition],
+                    maxSizeGb = sizeValues[maxSizeSpinner.selectedItemPosition],
+                    torrServer = torrServerInput.text.toString()
                 )
                 HubPerformanceSettings.save(context, profileValues[profileSpinner.selectedItemPosition])
                 HubHomePreferences.save(context, HubHomePreferences.Config(homeOrder, homeHidden))

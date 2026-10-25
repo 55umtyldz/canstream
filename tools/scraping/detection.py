@@ -30,8 +30,8 @@ SOFT_404_INDICATORS = [
     "sayfa bulunamadi",
     "içerik bulunamadı",
     "icerik bulunamadi",
-    "bulunamadı",
-    "bulunamadi",
+    "film bulunamadı",
+    "dizi bulunamadı",
     "böyle bir sayfa yok",
     "arama sonucu bulunamadı"
 ]
@@ -138,9 +138,10 @@ def is_soft_404(status: Optional[int], body: str, title: Optional[str] = None) -
     if not body:
         return False
 
-    # Remove script and style tags to avoid false positives on embedded JS translation tables
-    body_no_script = re.sub(r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>', '', body[:15000], flags=re.IGNORECASE)
+    # Remove script, style, and hidden template elements to avoid false positives on embedded JS/search placeholders
+    body_no_script = re.sub(r'<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>', '', body[:20000], flags=re.IGNORECASE)
     body_no_script = re.sub(r'<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>', '', body_no_script, flags=re.IGNORECASE)
+    body_no_script = re.sub(r'<[^>]+(?:hidden|display:\s*none)[^>]*>[^<]*</[^>]+>', '', body_no_script, flags=re.IGNORECASE)
     body_sample = body_no_script.lower()
 
     for ind in SOFT_404_INDICATORS:

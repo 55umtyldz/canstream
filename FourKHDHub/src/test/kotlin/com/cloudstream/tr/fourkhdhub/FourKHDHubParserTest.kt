@@ -37,4 +37,39 @@ class FourKHDHubParserTest {
         assertTrue(result.single().name == "Fallback")
         assertEquals("https://4khdhub.one/movie/fallback/", result.single().url)
     }
+
+    @Test
+    fun parsesModernCardGridStructure() {
+        val document = Jsoup.parse(
+            """
+            <div class="card-grid">
+              <a href="/marvels-the-punisher-series-2288/">
+                <div class="movie-card-image"><img src="https://catimages.org/poster.jpg"></div>
+                <div class="movie-card-content">
+                  <h3>Marvel's The Punisher</h3>
+                  <span>2017</span>
+                </div>
+              </a>
+              <a href="/la-bola-negra-movie-8406/">
+                <div class="movie-card-image"><img src="https://image.tmdb.org/poster2.jpg"></div>
+                <div class="movie-card-content">
+                  <h3>La bola negra</h3>
+                  <span>2026</span>
+                </div>
+              </a>
+            </div>
+            """.trimIndent()
+        )
+
+        val results = FourKHDHub().parseCards(document)
+
+        assertEquals(2, results.size)
+        assertEquals("Marvel's The Punisher", results[0].name)
+        assertEquals("https://4khdhub.one/marvels-the-punisher-series-2288/", results[0].url)
+        assertEquals("https://catimages.org/poster.jpg", results[0].posterUrl)
+
+        assertEquals("La bola negra", results[1].name)
+        assertEquals("https://4khdhub.one/la-bola-negra-movie-8406/", results[1].url)
+        assertEquals("https://image.tmdb.org/poster2.jpg", results[1].posterUrl)
+    }
 }

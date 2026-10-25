@@ -1,5 +1,5 @@
 {
-  "testedAt": "2026-09-16T23:02:40.957133+00:00",
+  "testedAt": "2026-10-25T23:19:32.737286+00:00",
   "providers": [
     {
       "provider": "AnimeciX",
@@ -30,40 +30,19 @@
       "homepage": {
         "status": "PASS",
         "itemCount": 15,
-        "sample": "ANTİK UZAYLILAR\nUzaylılar ve Kuts16"
-      },
-      "detail": {
-        "status": "FAIL",
-        "title": "404 — Sayfa Bulunamadı | Belgeselx",
-        "reason": "SOFT_404_PAGE"
-      },
-      "playerDiscovery": {
-        "status": "PLAYER_NOT_FOUND"
-      },
-      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
-      "subtitle": "NONE",
-      "overall": "PARTIAL_PASS",
-      "details": []
-    },
-    {
-      "provider": "DiziPal",
-      "module": "DiziPal",
-      "homepage": {
-        "status": "PASS",
-        "itemCount": 15,
-        "sample": "Dublaj & Altyazı\n\n\r\n                                            Reacher"
+        "sample": "ÃN CEPHELER\nSezon 1 BÃ¶lÃ¼m 19"
       },
       "detail": {
         "status": "PASS",
-        "title": "Silo izle - Dizipal",
+        "title": "COSMOS : BİR UZAY SERÜVENİ İzle — belgeselx.com",
         "episodeDiscoveryMode": "STRICT_CONFIG",
-        "episodesCount": 30
+        "episodesCount": 13
       },
       "playerDiscovery": {
         "status": "PLAYER_DISCOVERED",
         "iframes": 1,
-        "hasPlayer": true,
-        "targetUrl": "https://dizipal1430.com/bolum/silo-1-sezon-1-bolum"
+        "hasPlayer": false,
+        "targetUrl": "https://belgeselx.com/video/data/new5.php?id=998&sira=1"
       },
       "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
       "subtitle": "DUBBED",
@@ -76,22 +55,47 @@
       "homepage": {
         "status": "PASS",
         "itemCount": 15,
-        "sample": "Forgotten Island23 Eylül"
+        "sample": "Godzilla Minus Zero03 Kasım"
       },
       "detail": {
         "status": "PASS",
-        "title": "Forgotten Island 2026 Filmi 1080p Full HD izle",
+        "title": "Island Zero 2018 Filmi 1080p Full HD izle",
         "episodeDiscoveryMode": "NONE",
         "episodesCount": 0
       },
       "playerDiscovery": {
         "status": "PLAYER_DISCOVERED",
-        "iframes": 2,
+        "iframes": 1,
         "hasPlayer": true,
-        "targetUrl": "https://filmmakinesi.to/film/forgotten-island-2026/"
+        "targetUrl": "https://filmmakinesi.to/film/island-zero-2018/"
       },
       "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
       "subtitle": "DUBBED",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "4KHDHub",
+      "module": "FourKHDHub",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 15,
+        "sample": "4KDVHDR \n\n\nDrama\nThriller\nCrime\nAction & Adventure\nHindi\nEnglish\nDual Language\n2"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Batman (1989) - 4K-HDHub",
+        "episodeDiscoveryMode": "NONE",
+        "episodesCount": 0
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": false,
+        "targetUrl": "https://4khdhub.one/batman-movie-908/"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
       "overall": "PASS",
       "details": []
     },
@@ -101,7 +105,7 @@
       "homepage": {
         "status": "PASS",
         "itemCount": 15,
-        "sample": "Örümcek Adam Yepyeni Bir Gün - Spider Man Brand New Day"
+        "sample": "Ruhlar Bölgesi Aramızdalar - Insidious Out of the Further"
       },
       "detail": {
         "status": "PASS",
@@ -126,7 +130,7 @@
       "homepage": {
         "status": "PASS",
         "itemCount": 15,
-        "sample": "Türkçe Altyazı1998\n\n\n\nSoldier – AskerAksiyon · Bilim Kurgu\n6.1IMDB"
+        "sample": "Türkçe Altyazı2004\n\n\n\nCloser – Daha YaklaşDram · Romantik\n7.2IMDB"
       },
       "detail": {
         "status": "PASS",
@@ -139,31 +143,6 @@
         "iframes": 1,
         "hasPlayer": true,
         "targetUrl": "https://kultfilmler.net/soldier-asker/"
-      },
-      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
-      "subtitle": "NONE",
-      "overall": "PASS",
-      "details": []
-    },
-    {
-      "provider": "TurkAnime",
-      "module": "TurkAnime",
-      "homepage": {
-        "status": "PASS",
-        "itemCount": 9,
-        "sample": "Tenmaku no Jaadugar 12. Bölüm Final izle"
-      },
-      "detail": {
-        "status": "PASS",
-        "title": "Death Note izle | Konusu, Bölümleri ve Karakterler",
-        "episodeDiscoveryMode": "STRICT_CONFIG",
-        "episodesCount": 37
-      },
-      "playerDiscovery": {
-        "status": "PLAYER_DISCOVERED",
-        "iframes": 1,
-        "hasPlayer": true,
-        "targetUrl": "https://www.turkanime.tv/ajax/videosec&<REDACTED_QUERY>"
       },
       "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
       "subtitle": "NONE",
@@ -201,7 +180,7 @@
       "homepage": {
         "status": "PASS",
         "itemCount": 9,
-        "sample": "One Piece"
+        "sample": "Regular Show"
       },
       "detail": {
         "status": "PASS",
@@ -210,12 +189,14 @@
         "episodesCount": 20
       },
       "playerDiscovery": {
-        "status": "PLAYER_NOT_FOUND",
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": true,
         "targetUrl": "https://sezonlukdizi.cc/breaking-bad/5-sezon-16-bolum.html"
       },
       "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
       "subtitle": "DUBBED",
-      "overall": "PARTIAL_PASS",
+      "overall": "PASS",
       "details": []
     },
     {
@@ -224,7 +205,7 @@
       "homepage": {
         "status": "PASS",
         "itemCount": 15,
-        "sample": "Bulvar İzle"
+        "sample": "Soulm8te İzle"
       },
       "detail": {
         "status": "PASS",
@@ -244,35 +225,12 @@
       "details": []
     },
     {
-      "provider": "DiziMom",
-      "module": "DiziMom",
-      "homepage": {
-        "status": "PASS",
-        "itemCount": 15,
-        "sample": "Güneşin Doğduğu Yer izle"
-      },
-      "detail": {
-        "status": "PASS",
-        "title": "Bangkok Breaking izle | DiziMOM",
-        "episodeDiscoveryMode": "GENERIC_FALLBACK",
-        "episodesCount": 15
-      },
-      "playerDiscovery": {
-        "status": "PLAYER_NOT_FOUND",
-        "targetUrl": "https://www.dizimom.diy/turkce-dublaj-bolumler-hd/"
-      },
-      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
-      "subtitle": "DUBBED",
-      "overall": "PARTIAL_PASS",
-      "details": []
-    },
-    {
       "provider": "DiziYou",
       "module": "DiziYou",
       "homepage": {
         "status": "PASS",
         "itemCount": 15,
-        "sample": "Lanterns 1. Sezon 5. Bölüm"
+        "sample": "Dustfall 1. Sezon 1. Bölüm"
       },
       "detail": {
         "status": "PASS",
@@ -297,21 +255,23 @@
       "homepage": {
         "status": "PASS",
         "itemCount": 15,
-        "sample": "Sihame izle"
+        "sample": "Organize İşler: Karun HazinesiYENİ DİZİ2.5Organize İşler: Karun HazinesiSuç · 20"
       },
       "detail": {
         "status": "PASS",
         "title": "Breaking Bad izle | Türkçe Dublaj & Altyazılı izle",
-        "episodeDiscoveryMode": "STRICT_CONFIG",
-        "episodesCount": 13
+        "episodeDiscoveryMode": "RSC_STREAM",
+        "episodesCount": 62
       },
       "playerDiscovery": {
-        "status": "PLAYER_NOT_FOUND",
-        "targetUrl": "https://dizilla.now/breaking-bad-5-sezon-16-bolum-c02"
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 0,
+        "hasPlayer": true,
+        "targetUrl": "https://dizilla.now/breaking-bad-1-sezon-1-bolum-c02"
       },
       "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
       "subtitle": "DUBBED",
-      "overall": "PARTIAL_PASS",
+      "overall": "PASS",
       "details": []
     },
     {
@@ -320,7 +280,7 @@
       "homepage": {
         "status": "PASS",
         "itemCount": 15,
-        "sample": "Örümcek-Adam: Yepyeni Bir Gün - Spider-Man: Brand New Day izle"
+        "sample": "Otis Kasırgasının Tam Ortasında - Contra el huracán izle"
       },
       "detail": {
         "status": "PASS",
@@ -337,6 +297,329 @@
       "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
       "subtitle": "DUBBED",
       "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "JetFilmIzle",
+      "module": "JetFilmIzle",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 15,
+        "sample": "Moana Full Türkçe Dublaj İzle"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Batman Ninja vs. Yakuza League Filmi İzle: Full HD",
+        "episodeDiscoveryMode": "NONE",
+        "episodesCount": 0
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": true,
+        "targetUrl": "https://jetfilmizle.app/film/batman-ninja-vs-yakuza-league"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "DUBBED",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "CloudStreamHub",
+      "module": "CloudStreamHub",
+      "homepage": {
+        "status": "FAIL",
+        "itemCount": 0,
+        "reason": "0 valid content items discovered"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Inception",
+        "episodeDiscoveryMode": "NONE",
+        "episodesCount": 0
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_NOT_FOUND",
+        "targetUrl": "https://api.themoviedb.org/3/movie/27205?api_key=90ad3ec891e5923150283b99719d890f"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
+      "overall": "PARTIAL_PASS",
+      "details": []
+    },
+    {
+      "provider": "DiziKorea",
+      "module": "DiziKorea",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 15,
+        "sample": "★\n8.8\n\n2026\n\n\n\nFinal Table"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Doctor X (2026) izle - Dizikorea",
+        "episodeDiscoveryMode": "STRICT_CONFIG",
+        "episodesCount": 12
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 3,
+        "hasPlayer": false,
+        "targetUrl": "https://dizikorea3.com/dizi/doctor-x-izle/sezon-1/bolum-1"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "DUBBED",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "DramaDizilerim",
+      "module": "DramaDizilerim",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 15,
+        "sample": "🔥 Trend #1\n\nMy Hockey Ex Regrets After I slimmed Down\n\n Hemen İzle"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Köle Kral Full İzle (Türkçe Dublaj) - Drama Dizile",
+        "episodeDiscoveryMode": "STRICT_CONFIG",
+        "episodesCount": 42
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": false,
+        "targetUrl": "https://dramadizilerim.com/izle/kole-kral?s=1&e=1"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "DUBBED",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "WebDramaTurkey",
+      "module": "WebDramaTurkey",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 15,
+        "sample": "The Muse of Section E\n\n\n6.9M izlenme"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Hidden Love İzle - Web Drama Turkey",
+        "episodeDiscoveryMode": "STRICT_CONFIG",
+        "episodesCount": 25
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": true,
+        "targetUrl": "https://webdramaturkey2.com/dizi/hidden-love-izle/1-sezon/1-bolum"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "Animeler",
+      "module": "Animeler",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 15,
+        "sample": "Şimdi İzle"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Ashita no Joe 2 İzle | Animeler.live",
+        "episodeDiscoveryMode": "STRICT_CONFIG",
+        "episodesCount": 47
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": false,
+        "targetUrl": "https://animeler.live/ashita-no-joe-2/bolum-1"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "SetFilmIzle",
+      "module": "SetFilmIzle",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 7,
+        "sample": "Tümü"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "The Get Out (2026) | Set Film izle",
+        "episodeDiscoveryMode": "NONE",
+        "episodesCount": 0
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": true,
+        "targetUrl": "https://www.setfilmizle.ltd/film/the-get-out/"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "HDFilmDelisi",
+      "module": "HDFilmDelisi",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 8,
+        "sample": "Breaking Bad izle"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Saplantı izle (2025) Türkçe Dublaj ve Altyazılı",
+        "episodeDiscoveryMode": "NONE",
+        "episodesCount": 0
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 0,
+        "hasPlayer": false,
+        "targetUrl": "https://hdfilmdelisi.one/film/saplanti-obsession"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "HARDSUB",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "Dizigecesi",
+      "module": "Dizigecesi",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 15,
+        "sample": "Spartacus"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Spartacus İzle - Dizigecesi",
+        "episodeDiscoveryMode": "STRICT_CONFIG",
+        "episodesCount": 39
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": true,
+        "targetUrl": "https://dizigecesi.com/dizi/spartacus/1-sezon/1-bolum"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "RareFilmm",
+      "module": "RareFilmm",
+      "homepage": {
+        "status": "FAIL",
+        "itemCount": 0,
+        "reason": "0 valid content items discovered"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Paris s’éveille (1991) – rarefilmm | The Cave of F",
+        "episodeDiscoveryMode": "STRICT_CONFIG",
+        "episodesCount": 4
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": false,
+        "targetUrl": "https://rarefilmm.com/2026/07/paris-seveille-1991/"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
+      "overall": "PARTIAL_PASS",
+      "details": []
+    },
+    {
+      "provider": "StarTV",
+      "module": "StarTV",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 15,
+        "sample": "Sevdiğim SensinDerya'dan İnci'ye Büyük Racon!"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Tuzlu Kahve İzle | Star TV",
+        "episodeDiscoveryMode": "STRICT_CONFIG",
+        "episodesCount": 3
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 0,
+        "hasPlayer": true,
+        "targetUrl": "https://www.startv.com.tr/dizi/tuzlu-kahve/bolumler/3-bolum"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "DiziIzle",
+      "module": "DiziIzle",
+      "homepage": {
+        "status": "PASS",
+        "itemCount": 15,
+        "sample": "Güldür Güldür izle"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Tuzlu Kahve son bölüm izle - Diziizle",
+        "episodeDiscoveryMode": "STRICT_CONFIG",
+        "episodesCount": 8
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 1,
+        "hasPlayer": false,
+        "targetUrl": "https://www.diziizle.you/tuzlu-kahve/bolum-8/"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
+      "overall": "PASS",
+      "details": []
+    },
+    {
+      "provider": "YTS",
+      "module": "YTS",
+      "homepage": {
+        "status": "FAIL",
+        "itemCount": 0,
+        "reason": "0 valid content items discovered"
+      },
+      "detail": {
+        "status": "PASS",
+        "title": "Inception",
+        "episodeDiscoveryMode": "NONE",
+        "episodesCount": 0
+      },
+      "playerDiscovery": {
+        "status": "PLAYER_DISCOVERED",
+        "iframes": 0,
+        "hasPlayer": false,
+        "targetUrl": "https://yts.gg/api/v2/movie_details.json?movie_id=1606&with_images=true"
+      },
+      "runtimePlayback": "UNVERIFIED_BY_AUTOMATION",
+      "subtitle": "NONE",
+      "overall": "PARTIAL_PASS",
       "details": []
     }
   ]

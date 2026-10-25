@@ -54,10 +54,10 @@ class JetFilmIzleParserTest {
 
     @Test
     fun testCurrentSearchRoutesEncodeQueryAndFollowLivePagination() {
-        assertEquals("https://jetfilmizle.now/arama?q=Batman+%26+Robin", provider.searchUrl("Batman & Robin", 1))
-        assertEquals("https://jetfilmizle.now/search/sayfa-2?q=batman", provider.searchUrl("batman", 2))
-        assertEquals("https://jetfilmizle.now/filmler/sayfa-2", provider.mainPageUrl(provider.mainUrl + "/", 2))
-        assertEquals("https://jetfilmizle.now/tur/aksiyon/sayfa-2", provider.mainPageUrl(provider.mainUrl + "/tur/aksiyon", 2))
+        assertEquals("https://jetfilmizle.app/arama?q=Batman+%26+Robin", provider.searchUrl("Batman & Robin", 1))
+        assertEquals("https://jetfilmizle.app/search/sayfa-2?q=batman", provider.searchUrl("batman", 2))
+        assertEquals("https://jetfilmizle.app/filmler/sayfa-2", provider.mainPageUrl(provider.mainUrl + "/", 2))
+        assertEquals("https://jetfilmizle.app/tur/aksiyon/sayfa-2", provider.mainPageUrl(provider.mainUrl + "/tur/aksiyon", 2))
     }
     @Test
     fun testCurrentSourceTabsPreserveZeroBasedIndicesAndPlayerTypes() {

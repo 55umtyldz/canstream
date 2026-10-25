@@ -240,20 +240,6 @@ class CloudStreamHub : MainAPI() {
             else collector.direct(link)
         }
 
-        suspend fun fetchSubtitlesInBackground() {
-            val imdbId = payload.imdbId ?: return
-            CoroutineScope(currentCoroutineContext()).launch(Dispatchers.IO) {
-                com.cloudstream.tr.core.resolvers.SubtitlesResolver.resolveTurkishSubtitles(
-                    imdbId = imdbId,
-                    isMovie = payload.isMovie,
-                    season = payload.season,
-                    episode = payload.episode,
-                    title = payload.title,
-                    callback = subtitleCallback
-                )
-            }
-        }
-
         // 0. Zero-Latency Stream Cache Check (instant links)
         val cacheKey = com.cloudstream.tr.core.streaming.StreamCacheManager.buildKey(
             title = payload.title,
@@ -300,10 +286,19 @@ class CloudStreamHub : MainAPI() {
         // Publish cached candidates only after fresh resolution so they cannot occupy
         // the limited quality quotas before fresher 4K/REMUX links are considered.
 
-        // 1. Automated Turkish Subtitles via OpenSubtitles
-        fetchSubtitlesInBackground()
-
         return coroutineScope {
+            // 1. Automated Turkish Subtitles via OpenSubtitles / Stremio
+            val subtitleJob = launch(Dispatchers.IO) {
+                com.cloudstream.tr.core.resolvers.SubtitlesResolver.resolveTurkishSubtitles(
+                    imdbId = payload.imdbId,
+                    title = payload.title,
+                    year = payload.year,
+                    isMovie = payload.isMovie,
+                    season = payload.season,
+                    episode = payload.episode,
+                    callback = subtitleCallback
+                )
+            }
             // Direct HTTP resolution and federation must not block the torrent pair or each other.
             val directJob = launch {
                 val originStart = System.nanoTime()
@@ -624,6 +619,7 @@ class CloudStreamHub : MainAPI() {
             )
             torrentJob.join()
             directJob.join()
+            try { subtitleJob.join() } catch (_: Exception) {}
             val freshFederation = federationTorrents.toList()
             collector.torrents(freshFederation + HubTorrentSelector.cachedFallback(
                 cachedLinks.orEmpty(), collector.snapshot() + freshFederation, false

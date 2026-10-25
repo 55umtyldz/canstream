@@ -115,7 +115,8 @@ internal suspend fun prepareTorrentStream(
 
 internal fun isLocalTorrentStream(url: String): Boolean = try {
     val uri = URI(url)
-    uri.scheme == "http" && uri.host == "127.0.0.1" &&
+    val host = uri.host ?: ""
+    uri.scheme == "http" && (host == "127.0.0.1" || host == "localhost" || host.startsWith("192.168.") || host.startsWith("10.") || host.startsWith("172.")) &&
         uri.port in 1..65535 && uri.rawUserInfo == null && !uri.rawPath.isNullOrEmpty()
 } catch (_: java.net.URISyntaxException) {
     false
