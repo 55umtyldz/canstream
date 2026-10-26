@@ -1,4 +1,4 @@
-version = 37
+version = 38
 
 dependencies {
     // Official host SDK: compile-only; host player/action classes stay in CloudStream.

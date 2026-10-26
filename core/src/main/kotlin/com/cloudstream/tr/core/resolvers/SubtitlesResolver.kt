@@ -3,16 +3,19 @@ package com.cloudstream.tr.core.resolvers
 import com.cloudstream.tr.core.diagnostics.DiagnosticCategory
 import com.cloudstream.tr.core.diagnostics.DiagnosticLogger
 import com.cloudstream.tr.core.diagnostics.DiagnosticStage
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.SubtitleFile
 import com.lagradost.cloudstream3.newSubtitleFile
 import com.lagradost.cloudstream3.app
 import java.net.URLEncoder
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class OpenSubtitlesResponse(
     @JsonProperty("subtitles") val subtitles: List<OpenSubtitleItem>? = null
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class OpenSubtitleItem(
     @JsonProperty("id") val id: String? = null,
     @JsonProperty("url") val url: String? = null,
@@ -21,15 +24,22 @@ data class OpenSubtitleItem(
     @JsonProperty("subtitleFileName") val subtitleFileName: String? = null
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class CinemetaResponse(
     @JsonProperty("metas") val metas: List<CinemetaMeta>? = null
 )
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 data class CinemetaMeta(
     @JsonProperty("id") val id: String? = null,
+    @JsonProperty("imdb_id") val imdbId: String? = null,
     @JsonProperty("name") val name: String? = null,
-    @JsonProperty("year") val year: String? = null
-)
+    @JsonProperty("year") val year: String? = null,
+    @JsonProperty("releaseInfo") val releaseInfo: String? = null
+) {
+    val effectiveId: String? get() = imdbId ?: id
+    val effectiveYear: String? get() = year ?: releaseInfo
+}
 
 object SubtitlesResolver {
     private val BASE_URLS = listOf(
@@ -51,10 +61,10 @@ object SubtitlesResolver {
             val resp = app.get(url, timeout = 5).parsedSafe<CinemetaResponse>()
             val metas = resp?.metas.orEmpty()
             if (year != null) {
-                metas.firstOrNull { it.year?.contains(year.toString()) == true }?.id
-                    ?: metas.firstOrNull()?.id
+                metas.firstOrNull { it.effectiveYear?.contains(year.toString()) == true }?.effectiveId
+                    ?: metas.firstOrNull()?.effectiveId
             } else {
-                metas.firstOrNull()?.id
+                metas.firstOrNull()?.effectiveId
             }
         } catch (_: Exception) {
             null

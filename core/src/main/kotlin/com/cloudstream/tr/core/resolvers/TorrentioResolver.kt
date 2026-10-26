@@ -79,7 +79,7 @@ object TorrentioResolver {
         if (!Regex("tt[0-9]+").matches(imdbId)) return TorrentioLookupEvidence(emptyList())
         val type = if (isMovie) "movie" else "series"
         val idPath = if (isMovie) imdbId else "$imdbId:$season:$episode"
-        val options = "qualityfilter=scr,cam|sort=quality|limit=20"
+        val options = "qualityfilter=scr,cam|sort=quality|limit=30"
         val prefix = DebridConfig.getActiveDebridPrefix()?.let { "$it|" } ?: ""
         val fullOptions = "$prefix$options"
         val url = "https://torrentio.strem.fun/$fullOptions/stream/$type/$idPath.json"
@@ -146,14 +146,14 @@ object TorrentioResolver {
 
             var tags = ""
             if (isRemux) tags += " [REMUX]"
-            if (isDV) tags += " [DV]"
+            if (isDV) tags += " [DV] [Dolby Vision]"
             if (isHDR10Plus) tags += " [HDR10+]"
             else if (isHDR) tags += " [HDR]"
 
             if (isTrueHD && isAtmos && is71) tags += " [TrueHD Atmos 7.1]"
             else if (isDtsHdMa && is71) tags += " [DTS-HD MA 7.1]"
-            else if (isAtmos && is71) tags += " [Atmos 7.1]"
-            else if (isAtmos) tags += " [Atmos]"
+            else if (isAtmos && is71) tags += " [Dolby Atmos 7.1]"
+            else if (isAtmos) tags += " [Dolby Atmos]"
             else if (is71) tags += " [7.1]"
             else if (is51) tags += " [5.1]"
 

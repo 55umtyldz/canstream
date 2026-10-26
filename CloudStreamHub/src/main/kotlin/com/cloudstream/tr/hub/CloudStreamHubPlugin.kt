@@ -30,6 +30,7 @@ class CloudStreamHubPlugin : Plugin() {
         HubAppearancePreferences.load(context.applicationContext)
         super.load(context)
         openSettings = { settingsContext -> showHubSettings(settingsContext) }
+        registerVideoClickAction(HubTorrentJustPlayerAction())
         registerVideoClickAction(HubTorrentVlcAction())
         registerVideoClickAction(HubTorrentMxAction())
     }

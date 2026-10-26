@@ -291,7 +291,7 @@ class CloudStreamHub : MainAPI() {
             val subtitleJob = launch(Dispatchers.IO) {
                 com.cloudstream.tr.core.resolvers.SubtitlesResolver.resolveTurkishSubtitles(
                     imdbId = payload.imdbId,
-                    title = payload.title,
+                    title = payload.originalTitle ?: payload.title,
                     year = payload.year,
                     isMovie = payload.isMovie,
                     season = payload.season,
