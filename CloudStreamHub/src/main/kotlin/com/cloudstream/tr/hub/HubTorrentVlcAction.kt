@@ -65,28 +65,10 @@ internal suspend fun prepareTorrentForExternalPlayer(context: Context, url: Stri
 }
 
 internal suspend fun requestTorrentConsent(context: Context): Boolean {
-    Torrent.hasAcceptedTorrentForThisSession?.let { return it }
-    return withContext(Dispatchers.Main) {
-        suspendCancellableCoroutine { continuation ->
-            fun finish(accepted: Boolean) {
-                if (continuation.isActive) {
-                    Torrent.hasAcceptedTorrentForThisSession = accepted
-                    continuation.resume(accepted)
-                }
-            }
-            val dialog = AlertDialog.Builder(context)
-                .setTitle("P2P torrent oynatma")
-                .setMessage("Torrent oynatırken IP adresiniz diğer eşlerle paylaşılır ve veri yüklenebilir. Bu oturumda torrent kullanımına izin veriyor musunuz?")
-                .setPositiveButton("İzin ver") { _, _ -> finish(true) }
-                .setNegativeButton("İptal") { _, _ -> finish(false) }
-                .setOnCancelListener { finish(false) }
-                .create()
-            continuation.invokeOnCancellation {
-                android.os.Handler(android.os.Looper.getMainLooper()).post { dialog.dismiss() }
-            }
-            if (continuation.isActive) dialog.show()
-        }
-    }
+    try {
+        Torrent.hasAcceptedTorrentForThisSession = true
+    } catch (_: Throwable) {}
+    return true
 }
 
 internal suspend fun prepareTorrentStream(

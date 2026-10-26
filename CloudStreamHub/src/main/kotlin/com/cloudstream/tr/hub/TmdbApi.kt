@@ -13,6 +13,7 @@ data class TmdbPageResponse(
 
 data class TmdbItem(
     @JsonProperty("id") val id: Int? = null,
+    @JsonProperty("imdb_id") val imdbId: String? = null,
     @JsonProperty("title") val title: String? = null,
     @JsonProperty("name") val name: String? = null,
     @JsonProperty("original_title") val originalTitle: String? = null,
@@ -68,6 +69,7 @@ data class TmdbExternalIds(
 
 data class TmdbDetailResponse(
     @JsonProperty("id") val id: Int? = null,
+    @JsonProperty("imdb_id") val imdbId: String? = null,
     @JsonProperty("title") val title: String? = null,
     @JsonProperty("name") val name: String? = null,
     @JsonProperty("original_title") val originalTitle: String? = null,

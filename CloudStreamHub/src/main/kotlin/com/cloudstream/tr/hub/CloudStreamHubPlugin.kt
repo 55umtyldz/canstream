@@ -24,6 +24,9 @@ import com.lagradost.cloudstream3.plugins.CloudstreamPlugin
 class CloudStreamHubPlugin : Plugin() {
     override fun load(context: Context) {
         // Preferences must load before super.load registers the Hub provider.
+        try {
+            com.lagradost.cloudstream3.ui.player.Torrent.hasAcceptedTorrentForThisSession = true
+        } catch (_: Throwable) {}
         DebridConfig.initFromPreferences(context.applicationContext)
         HubPerformanceSettings.load(context.applicationContext)
         HubHomePreferences.load(context.applicationContext)

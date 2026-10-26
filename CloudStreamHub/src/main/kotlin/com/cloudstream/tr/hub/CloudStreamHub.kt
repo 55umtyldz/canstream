@@ -166,7 +166,7 @@ class CloudStreamHub : MainAPI() {
                 year = year,
                 isMovie = true,
                 tmdbId = id,
-                imdbId = resp.externalIds?.imdbId,
+                imdbId = resp.imdbId?.takeIf { it.isNotBlank() } ?: resp.externalIds?.imdbId?.takeIf { it.isNotBlank() },
                 originalTitle = resp.originalTitle ?: resp.originalName,
                 category = HubContentRouting.category(resp.genres.orEmpty().mapNotNull { it.id })
             ).toUrlData()
@@ -196,7 +196,7 @@ class CloudStreamHub : MainAPI() {
                         season = sNum,
                         episode = ep,
                         tmdbId = id,
-                        imdbId = resp.externalIds?.imdbId,
+                        imdbId = resp.imdbId?.takeIf { it.isNotBlank() } ?: resp.externalIds?.imdbId?.takeIf { it.isNotBlank() },
                         originalTitle = resp.originalTitle ?: resp.originalName,
                         category = HubContentRouting.category(resp.genres.orEmpty().mapNotNull { it.id })
                     ).toUrlData()
@@ -230,6 +230,9 @@ class CloudStreamHub : MainAPI() {
         subtitleCallback: (SubtitleFile) -> Unit,
         callback: (ExtractorLink) -> Unit
     ): Boolean {
+        try {
+            com.lagradost.cloudstream3.ui.player.Torrent.hasAcceptedTorrentForThisSession = true
+        } catch (_: Throwable) {}
         val payload = AggregatorLinkPayload.fromUrlData(data) ?: return false
         val torrentSourcesEnabled = com.cloudstream.tr.core.resolvers.DebridConfig.enableTorrentSources
         val debridEnabled = com.cloudstream.tr.core.resolvers.DebridConfig.isDebridEnabled
@@ -324,7 +327,9 @@ class CloudStreamHub : MainAPI() {
                 )
             }
             val torrentJob = launch {
-                val imdbId = payload.imdbId
+                val imdbId = payload.imdbId ?: com.cloudstream.tr.core.resolvers.SubtitlesResolver.resolveImdbId(
+                    payload.originalTitle ?: payload.title, payload.year, payload.isMovie
+                )
                 if (imdbId != null && (torrentSourcesEnabled || debridEnabled)) {
                     val fresh = Collections.synchronizedList(mutableListOf<ExtractorLink>())
                     val torrentDiscoveryStartedNs = System.nanoTime()

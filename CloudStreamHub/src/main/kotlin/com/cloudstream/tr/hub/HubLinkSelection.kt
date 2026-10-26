@@ -157,18 +157,20 @@ internal object HubTorrentSelector {
         val demanding = Regex("""\b(dovi|dv|truehd|dts-hd|hevc|x265)\b""").containsMatchIn(name)
         val isDv = Regex("""\b(dovi|dv|dolby[ -]?vision)\b""").containsMatchIn(name)
         val isHdr = Regex("""\b(hdr|hdr10|hdr10\+|atmos)\b""").containsMatchIn(name)
-        val isQxr = Regex("""\b(qxr)\b""").containsMatchIn(name) || link.url.contains("qxr", ignoreCase = true)
+        val isZlibGroup = Regex("""\b(qxr|utr|tigole|joy|vyndros)\b""").containsMatchIn(name) ||
+            link.url.contains("qxr", ignoreCase = true)
 
         if (remux) score += if (profile == HubPerformanceSettings.FEATURE) 170 else 30
         else if (bluRay) score += 25
 
-        // QxR MKVs contain zlib compressed subtitle tracks, causing ExoPlayer ParserException (3001)
-        if (isQxr) score = -99999
+        // Releases with zlib compressed subtitle tracks cause ExoPlayer ParserException (3001)
+        if (isZlibGroup) score = -99999
 
         // Prioritize HDR10/Atmos (standard HEVC Main 10) for ExoPlayer hardware decoding compatibility.
         // Pure DV Profile 8 causes format_supported=NO_EXCEEDS_CAPABILITIES (4001) in Android MediaCodec.
-        if (isHdr && !isDv) score += 60
-        if (isDv) score -= 150
+        if (isHdr && !isDv) score += 120
+        if (isDv && !isHdr) score -= 250
+        else if (isDv) score -= 50
 
         if (profile == HubPerformanceSettings.COMPATIBLE && demanding) score -= 90
         return score
@@ -177,7 +179,11 @@ internal object HubTorrentSelector {
         .thenBy { it.source.lowercase(Locale.ROOT) }.thenBy { swarm(it) }
         .thenBy { file(it).orEmpty() }.thenBy { it.url }
 
-    fun select(candidates: List<ExtractorLink>, emitted: List<ExtractorLink> = emptyList()): List<ExtractorLink> {
+    fun select(
+        candidates: List<ExtractorLink>,
+        emitted: List<ExtractorLink> = emptyList(),
+        expanded: Boolean = false
+    ): List<ExtractorLink> {
         val usedFiles = emitted.filter(::isTorrent).map(::identity).toMutableSet()
         val result = mutableListOf<ExtractorLink>()
         val canonical = candidates.filter(::isTorrent).groupBy(::identity).values.map { sameSwarm ->
@@ -185,12 +191,24 @@ internal object HubTorrentSelector {
             // Prefer YTS only when its file selection has exactly the same semantics.
             sameSwarm.sortedWith(rank).firstOrNull { it.source.equals("YTS", true) && file(it) == file(best) } ?: best
         }
-        for ((quality, group) in canonical.groupBy { it.quality }.toSortedMap()) {
-            // A single fast origin must not occupy every 2160p slot before a
-            // later Blu-ray/REMUX source can be emitted by another origin.
+        val qualityGroups = if (expanded) {
+            canonical.groupBy { it.quality }.toSortedMap(compareByDescending { it })
+        } else {
+            canonical.groupBy { it.quality }.toSortedMap()
+        }
+        for ((quality, group) in qualityGroups) {
             val highResolution = quality >= 2160
-            val totalQuota = if (highResolution) 4 else 3
-            val originQuota = if (highResolution) 3 else 3
+            val totalQuota = if (expanded) {
+                when {
+                    quality >= 2160 -> 15
+                    quality >= 1080 -> 12
+                    quality >= 720 -> 8
+                    else -> 5
+                }
+            } else {
+                if (highResolution) 4 else 3
+            }
+            val originQuota = if (expanded) totalQuota else (if (highResolution) 3 else 3)
             var remaining = (totalQuota - emitted.count { isTorrent(it) && it.quality == quality }).coerceAtLeast(0)
             val originCounts = emitted.filter { isTorrent(it) && it.quality == quality }
                 .groupingBy { it.source.lowercase(Locale.ROOT) }.eachCount().toMutableMap()
@@ -216,7 +234,8 @@ internal object HubTorrentSelector {
 internal class HubLinkCollector(
     private val torrentEnabled: Boolean,
     private val debridEnabled: Boolean,
-    private val callback: (ExtractorLink) -> Unit
+    private val callback: (ExtractorLink) -> Unit,
+    private val expanded: Boolean = true
 ) {
     private val links = mutableListOf<ExtractorLink>()
     private val seen = mutableSetOf<String>()
@@ -232,7 +251,7 @@ internal class HubLinkCollector(
 
     @Synchronized fun torrents(candidates: List<ExtractorLink>) {
         if (!torrentEnabled) return
-        HubTorrentSelector.select(candidates, links).forEach(::publish)
+        HubTorrentSelector.select(candidates, links, expanded).forEach(::publish)
     }
 
     private fun publish(link: ExtractorLink) {

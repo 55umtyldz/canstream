@@ -83,7 +83,7 @@ class HubLinkSelectionTest {
 
     @Test fun callbacksAreImmediateForEveryHttpLinkAndTorrentQuotaSpansBatches() {
         val emitted = mutableListOf<ExtractorLink>()
-        val collector = HubLinkCollector(true, true, emitted::add)
+        val collector = HubLinkCollector(true, true, emitted::add, expanded = false)
         val http = (1..4).map { ExtractorLink(source = "FilmMakinesi", name = "HTTP $it", url = "https://cdn.test/$it.mp4",
             referer = "https://site.test", quality = 1080, type = ExtractorLinkType.VIDEO, headers = mapOf("Referer" to "https://site.test"),
             extractorData = "metadata") }
@@ -125,7 +125,7 @@ class HubLinkSelectionTest {
         val fallback = HubTorrentSelector.cachedFallback(cached, fresh, true)
         assertEquals(listOf(cached[1]), fallback)
         val emitted = mutableListOf<ExtractorLink>()
-        val collector = HubLinkCollector(true, false, emitted::add)
+        val collector = HubLinkCollector(true, false, emitted::add, expanded = false)
         assertTrue(emitted.isEmpty())
         collector.torrents(fresh + fallback)
         assertEquals(3, emitted.size)
