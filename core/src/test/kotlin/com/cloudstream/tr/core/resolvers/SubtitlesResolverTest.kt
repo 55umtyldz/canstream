@@ -66,7 +66,7 @@ class SubtitlesResolverTest {
         )
         assertTrue("Subtitles for The Guard should not be empty", collectedSubs.isNotEmpty())
         assertTrue("Subtitles should end with .srt for ExoPlayer compatibility", collectedSubs.all { it.url.endsWith(".srt") || it.url.endsWith(".vtt") })
-        assertTrue("Subtitles should have clean Turkish label", collectedSubs.any { it.lang.startsWith("Türkçe") })
+        assertTrue("Subtitles should have clean Turkish label", collectedSubs.any { it.lang.startsWith("Turkish") || it.lang.startsWith("Türkçe") })
     }
 
     @Test

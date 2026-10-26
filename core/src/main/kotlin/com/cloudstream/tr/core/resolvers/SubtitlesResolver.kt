@@ -125,11 +125,13 @@ object SubtitlesResolver {
                     val isBluray = targetStr.contains("bluray", ignoreCase = true) || targetStr.contains("bdrip", ignoreCase = true)
                     val isWebdl = targetStr.contains("web-dl", ignoreCase = true) || targetStr.contains("webrip", ignoreCase = true)
 
+                    // Pass "Turkish" so that CloudStream's SubtitleHelper maps it to 'tr'
+                    // and automatically matches the user's preferred subtitle language.
                     val label = when {
-                        index == 1 -> "Türkçe"
-                        isBluray -> "Türkçe (BluRay)"
-                        isWebdl -> "Türkçe (WEB-DL)"
-                        else -> "Türkçe #$index"
+                        index == 1 -> "Turkish"
+                        isBluray -> "Turkish (BluRay)"
+                        isWebdl -> "Turkish (WEB-DL)"
+                        else -> "Turkish #$index"
                     }
 
                     callback(newSubtitleFile(label, finalUrl))

@@ -155,8 +155,21 @@ internal object HubTorrentSelector {
         val remux = Regex("""\b(remux|bdremux)\b""").containsMatchIn(name)
         val bluRay = Regex("""\b(blu[ .-]?ray|bdrip)\b""").containsMatchIn(name)
         val demanding = Regex("""\b(dovi|dv|truehd|dts-hd|hevc|x265)\b""").containsMatchIn(name)
+        val isDv = Regex("""\b(dovi|dv|dolby[ -]?vision)\b""").containsMatchIn(name)
+        val isHdr = Regex("""\b(hdr|hdr10|hdr10\+|atmos)\b""").containsMatchIn(name)
+        val isQxr = Regex("""\b(qxr)\b""").containsMatchIn(name) || link.url.contains("qxr", ignoreCase = true)
+
         if (remux) score += if (profile == HubPerformanceSettings.FEATURE) 170 else 30
         else if (bluRay) score += 25
+
+        // QxR MKVs contain zlib compressed subtitle tracks, causing ExoPlayer ParserException (3001)
+        if (isQxr) score = -99999
+
+        // Prioritize HDR10/Atmos (standard HEVC Main 10) for ExoPlayer hardware decoding compatibility.
+        // Pure DV Profile 8 causes format_supported=NO_EXCEEDS_CAPABILITIES (4001) in Android MediaCodec.
+        if (isHdr && !isDv) score += 60
+        if (isDv) score -= 150
+
         if (profile == HubPerformanceSettings.COMPATIBLE && demanding) score -= 90
         return score
     }

@@ -114,6 +114,11 @@ object TorrentioResolver {
                 return@mapNotNull null
             }
 
+            // Filter out QxR Matroska releases: subtitle tracks use zlib compression, crashing Android ExoPlayer (3001)
+            if (Regex("""\b(QxR)\b""", RegexOption.IGNORE_CASE).containsMatchIn(rawTitle)) {
+                return@mapNotNull null
+            }
+
             val seedCount = reportedSeeds(rawTitle)
             val isDirectUrl = stream.url?.let { it.startsWith("https://", true) || it.startsWith("http://", true) } == true
             val effectiveMinSeeds = if (hasDebrid || isDirectUrl) 0 else DebridConfig.minSeeds

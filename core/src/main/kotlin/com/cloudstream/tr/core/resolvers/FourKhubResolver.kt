@@ -5,20 +5,35 @@ import com.cloudstream.tr.core.diagnostics.DiagnosticLogger
 import com.cloudstream.tr.core.diagnostics.DiagnosticStage
 import com.cloudstream.tr.core.network.StreamValidator
 import com.cloudstream.tr.core.network.ValidationStatus
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.app
 import com.lagradost.cloudstream3.utils.ExtractorLink
 import com.lagradost.cloudstream3.utils.Qualities
+import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.Jsoup
 import java.net.URI
 import java.net.URLEncoder
 
 data class RemoteDomainsConfig(
-    @JsonProperty("4khdhub") val fourKhub: String? = null
+    @param:JsonProperty("4khdhub") val fourKhub: String? = null
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class HdHubStream(
+    @param:JsonProperty("name") val name: String? = null,
+    @param:JsonProperty("title") val title: String? = null,
+    @param:JsonProperty("url") val url: String? = null
+)
+
+@JsonIgnoreProperties(ignoreUnknown = true)
+data class HdHubResponse(
+    @param:JsonProperty("streams") val streams: List<HdHubStream>? = null
 )
 
 object FourKhubResolver {
     private const val DOMAINS_CONFIG_URL = "https://raw.githubusercontent.com/phisher98/TVVVV/refs/heads/main/domains.json"
+    private const val HDHUB_STREMIO_BASE = "https://hdhub.thevolecitor.qzz.io/eyJ0b3Jib3giOiJ1bnNldCIsInF1YWxpdGllcyI6IjIxNjBwLDEwODBwIiwic29ydCI6ImRlc2MiLCJjb250ZW50IjoibGF0aW4sYXNpYW4ifQ"
     private val defaultDomains = listOf(
         "https://4khdhub.one",
         "https://4khdhub.com"
@@ -45,13 +60,94 @@ object FourKhubResolver {
         return activeDomains!!
     }
 
+    suspend fun resolveHdHubDirect(
+        imdbId: String,
+        isMovie: Boolean,
+        season: Int? = null,
+        episode: Int? = null
+    ): List<ExtractorLink> {
+        val type = if (isMovie) "movie" else "series"
+        val idPath = if (isMovie) "$imdbId.json" else "$imdbId:$season:$episode.json"
+        val endpoint = "$HDHUB_STREMIO_BASE/stream/$type/$idPath"
+        return try {
+            val resp = app.get(
+                endpoint,
+                headers = mapOf(
+                    "User-Agent" to "Mozilla/5.0",
+                    "Referer" to "https://web.stremio.com/",
+                    "Origin" to "https://web.stremio.com"
+                ),
+                timeout = 8
+            ).parsedSafe<HdHubResponse>()
+            val streams = resp?.streams ?: return emptyList()
+            val validLinks = mutableListOf<ExtractorLink>()
+            for (stream in streams) {
+                var directUrl = stream.url?.takeIf { it.startsWith("http") } ?: continue
+                if (directUrl.contains("pixeldrain.com/u/")) {
+                    directUrl = directUrl.replace("pixeldrain.com/u/", "pixeldrain.dev/api/file/") + "?download"
+                } else if (directUrl.contains("pixeldrain.dev/u/")) {
+                    directUrl = directUrl.replace("pixeldrain.dev/u/", "pixeldrain.dev/api/file/") + "?download"
+                }
+                val rawTitle = (stream.title ?: "").ifBlank { stream.name ?: "" }
+                val nameLower = ((stream.name ?: "") + " " + rawTitle).lowercase()
+                val is4K = nameLower.contains("2160") || nameLower.contains("4k")
+                val quality = if (is4K) Qualities.P2160.value else Qualities.P1080.value
+                val serverName = when {
+                    directUrl.contains("pixeldrain") -> "PixelDrain"
+                    directUrl.contains("hubcloud") -> "HubCloud"
+                    directUrl.contains("fastdl") -> "FastDL"
+                    else -> "FastCloud"
+                }
+                val sizeMatch = Regex("""\b(\d+(?:\.\d+)?\s*[GgMm]B)\b""").find(rawTitle)
+                val sizeStr = sizeMatch?.groupValues?.get(1)?.let { " [$it]" } ?: ""
+                val qualityStr = if (is4K) "4K UHD" else "1080p"
+                val displayName = "⚡ 4KHDHub • $serverName $qualityStr$sizeStr"
+
+                val preflight = StreamValidator.validateStream(
+                    url = directUrl,
+                    headers = mapOf("Referer" to "https://web.stremio.com/", "Origin" to "https://web.stremio.com"),
+                    provider = "FourKhubResolver"
+                )
+                if (preflight.status == ValidationStatus.VALID && preflight.hasMediaEvidence) {
+                    validLinks.add(
+                        newExtractorLink(
+                            source = "4KHDHub",
+                            name = displayName,
+                            url = directUrl,
+                            type = preflight.streamType
+                        ) {
+                            this.referer = "https://web.stremio.com/"
+                            this.quality = quality
+                            this.headers = mapOf("Referer" to "https://web.stremio.com/", "Origin" to "https://web.stremio.com")
+                        }
+                    )
+                }
+            }
+            validLinks
+        } catch (e: Exception) {
+            DiagnosticLogger.log(
+                provider = "FourKhubResolver",
+                stage = DiagnosticStage.LOAD,
+                category = DiagnosticCategory.NETWORK,
+                message = "Failed to fetch direct HDHub streams for $imdbId: ${e.message}"
+            )
+            emptyList()
+        }
+    }
+
     suspend fun resolve(
         title: String,
         year: Int? = null,
         isMovie: Boolean,
         season: Int? = null,
-        episode: Int? = null
+        episode: Int? = null,
+        imdbId: String? = null
     ): List<ExtractorLink> {
+        if (!imdbId.isNullOrBlank()) {
+            val directStreams = resolveHdHubDirect(imdbId, isMovie, season, episode)
+            if (directStreams.isNotEmpty()) return directStreams
+        }
+
         if (title.isBlank()) return emptyList()
 
         val cleanTitle = title.replace(Regex("""[^\w\s]"""), " ").replace(Regex("""\s+"""), " ").trim()
@@ -169,14 +265,15 @@ object FourKhubResolver {
                             if (preflight.status != ValidationStatus.VALID || !preflight.hasMediaEvidence) continue
 
                             links.add(
-                                ExtractorLink(
+                                newExtractorLink(
                                     source = "4KHDHub",
                                     name = displayName,
                                     url = btnHref,
-                                    referer = buttonPageUrl,
-                                    quality = mappedQuality,
                                     type = preflight.streamType
-                                )
+                                ) {
+                                    this.referer = buttonPageUrl
+                                    this.quality = mappedQuality
+                                }
                             )
                         }
                     } catch (e: Exception) {
