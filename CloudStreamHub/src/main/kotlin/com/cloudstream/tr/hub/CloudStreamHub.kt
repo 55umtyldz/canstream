@@ -306,7 +306,7 @@ class CloudStreamHub : MainAPI() {
                 val completed = HubSourceBudget.run(budget) {
                     try {
                         com.cloudstream.tr.core.resolvers.FourKhubResolver.resolve(
-                            title = payload.title, year = payload.year, isMovie = payload.isMovie,
+                            title = payload.originalTitle ?: payload.title, year = payload.year, isMovie = payload.isMovie,
                             season = payload.season, episode = payload.episode
                         ).forEach(interceptedCallback)
                     } catch (e: CancellationException) { throw e } catch (_: Exception) {}
