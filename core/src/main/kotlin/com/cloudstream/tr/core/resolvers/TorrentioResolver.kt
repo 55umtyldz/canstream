@@ -146,7 +146,7 @@ object TorrentioResolver {
 
             var tags = ""
             if (isRemux) tags += " [REMUX]"
-            if (isDV) tags += " [DV] [Dolby Vision]"
+            if (isDV) tags += " [DV] [Dolby Vision]" + (if (!hasDebrid) " ⚠️(Just Player)" else "")
             if (isHDR10Plus) tags += " [HDR10+]"
             else if (isHDR) tags += " [HDR]"
 
