@@ -1,5 +1,69 @@
 [
     {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=animecix.tv",
+        "fileHash": "sha256-eaa6e198951fa15b4337f8bb288f3c157c105d15a14b309501fa475272417546",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 156395,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "keyiflerolsun"
+        ],
+        "tvTypes": [
+            "Anime"
+        ],
+        "version": 109,
+        "internalName": "AnimeciX",
+        "description": "AnimeciX - G\u00fcncel anime ve film ar\u015fivi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/AnimeciX.cs3",
+        "name": "AnimeciX"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=animeler.pw",
+        "fileHash": "sha256-cf4d815799a77d9da5ea5928b583685f186500a5981ace1f217c40345ec7a9db",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 148306,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "Anime",
+            "AnimeMovie"
+        ],
+        "version": 21,
+        "internalName": "Animeler",
+        "description": "Animeler - T\u00fcrk\u00e7e Altyaz\u0131l\u0131 ve Dublajl\u0131 Anime \u0130zleme Platformu",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/Animeler.cs3",
+        "name": "Animeler"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=belgeselx.com",
+        "fileHash": "sha256-44a7a5e2f4898e6412b983be7e5f8d9421af8dc59e2730400708edd565f2ddf7",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 151758,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "keyiflerolsun"
+        ],
+        "tvTypes": [
+            "Documentary"
+        ],
+        "version": 110,
+        "internalName": "BelgeselX",
+        "description": "BelgeselX - T\u00fcrk\u00e7e dublaj ve altyaz\u0131l\u0131 belgesel ar\u015fivi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/BelgeselX.cs3",
+        "name": "BelgeselX"
+    },
+    {
         "iconUrl": "https://raw.githubusercontent.com/55umtyldz/canstream/main/assets/icon.png",
         "fileHash": "sha256-a4ea889e0ce17685eaba06c12a452712710557888b90a30159c4d012da3d9b6c",
         "apiVersion": 1,
@@ -23,5 +87,452 @@
         "description": "CanStreamHub \u2014 TMDB Ke\u015fif & Torrentio 4K + Yerli Kaynak \u00c7\u00f6z\u00fcc\u00fc",
         "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/CloudStreamHub.cs3",
         "name": "CloudStreamHub"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=dizigecesi.com",
+        "fileHash": "sha256-fff4543f416cb9eddfb918c118a47cb204a782b086f73071234d8a135f5ca390",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 148481,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "TvSeries",
+            "Movie"
+        ],
+        "version": 20,
+        "internalName": "Dizigecesi",
+        "description": "Dizigecesi - Yabanc\u0131 Dizi ve Film \u0130zle",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/Dizigecesi.cs3",
+        "name": "Dizigecesi"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=diziizle.you",
+        "fileHash": "sha256-92ffad3dbc54d3734d842ffc4fa60ba38d8e4cc3cfc1bb0fd70ee6579975a3de",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 150995,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 6,
+        "internalName": "DiziIzle",
+        "description": "Dizi\u0130zle T\u00fcrk dizileri ve tam b\u00f6l\u00fcmleri",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/DiziIzle.cs3",
+        "name": "DiziIzle"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=dizikorea3.com",
+        "fileHash": "sha256-ea98799e04e3ed56df480b6d2dd59ce3ad4260ee9f2ed736c36e30fcd4bf840e",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 149223,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "AsianDrama"
+        ],
+        "version": 20,
+        "internalName": "DiziKorea",
+        "description": "DiziKorea - En G\u00fcncel Asya ve Kore Dizileri izleme Sitesi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/DiziKorea.cs3",
+        "name": "DiziKorea"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=dizilla.now",
+        "fileHash": "sha256-41bf65d759e55bf3ec8b7c090d1656fb9c3ccfaacf772fa25e36dc4aaf534e1f",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 155097,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "keyiflerolsun"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 20,
+        "internalName": "Dizilla",
+        "description": "Dizilla - G\u00fcncel yabanc\u0131 dizi ve anime ar\u015fivi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/Dizilla.cs3",
+        "name": "Dizilla"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=diziyou.one",
+        "fileHash": "sha256-b8d7000c98c53903ffd7f63bbfaa97d03ef31a1e205d89b873c78d5d359c0d08",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 153962,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "keyiflerolsun"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 21,
+        "internalName": "DiziYou",
+        "description": "DiziYou - G\u00fcncel yabanc\u0131 dizi ve anime ar\u015fivi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/DiziYou.cs3",
+        "name": "DiziYou"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=dramadizilerim.com",
+        "fileHash": "sha256-ec6a36e397a9379270df24470b2e88b16081afe91b8e8762770df87662e24b0b",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 148928,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "AsianDrama"
+        ],
+        "version": 20,
+        "internalName": "DramaDizilerim",
+        "description": "DramaDizilerim - Kore, \u00c7in ve Asya K\u0131sa/Uzun Dizileri T\u00fcrk\u00e7e Altyaz\u0131l\u0131",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/DramaDizilerim.cs3",
+        "name": "DramaDizilerim"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=filmmakinesi.to",
+        "fileHash": "sha256-26248e2faae0c3a130b73ac76b4d18ce01a1c540156c76ced88a1378c8eaf243",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 152022,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "Kraptor123"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 110,
+        "internalName": "FilmMakinesi",
+        "description": "FilmMakinesi - En iyi 1080p Full HD film ve dizi platformu",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/FilmMakinesi.cs3",
+        "name": "FilmMakinesi"
+    },
+    {
+        "iconUrl": "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://4khdhub.one&size=128",
+        "fileHash": "sha256-ffb7d71ac9ad43c17c1e248b486abd54f54ae4a34b18aa55928dd6abd46ec774",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 146173,
+        "status": 1,
+        "language": "en",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor",
+            "Phisher98"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 10,
+        "internalName": "FourKHDHub",
+        "description": "4KHDHub Provider Plugin",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/FourKHDHub.cs3",
+        "name": "FourKHDHub"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=fullhdfilmizlesene.now",
+        "fileHash": "sha256-1e9fbe75229863b8421efe53fb9dd855c09beb7729418108708378292381ef98",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 152520,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 20,
+        "internalName": "FullHDFilmizlesene",
+        "description": "FullHDFilmizlesene - G\u00fcncel Full HD yerli ve yabanc\u0131 filmler",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/FullHDFilmizlesene.cs3",
+        "name": "FullHDFilmizlesene"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=hdfilmcehennemi.nl",
+        "fileHash": "sha256-e41bb97ce3d01c72e3af501a908702ef384ae8421b36896ed477fe0c4b844261",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 154160,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "keyiflerolsun"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 111,
+        "internalName": "HDFilmCehennemi",
+        "description": "HDFilmCehennemi - Y\u00fcksek kalitede T\u00fcrk\u00e7e dublaj ve altyaz\u0131l\u0131 film ve dizi izleme platformu",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/HDFilmCehennemi.cs3",
+        "name": "HDFilmCehennemi"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=hdfilmdelisi.one",
+        "fileHash": "sha256-4a09ed12854a7d26074c92c44c9b866b3d1c9601e153059d3e834615165e4636",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 148113,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 20,
+        "internalName": "HDFilmDelisi",
+        "description": "HDFilmDelisi - Film izle, Full HD T\u00fcrk\u00e7e Dublaj & Altyaz\u0131l\u0131",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/HDFilmDelisi.cs3",
+        "name": "HDFilmDelisi"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=jetfilmizle.vip",
+        "fileHash": "sha256-933be8a58521e2ca0ec0ec0a271ba8e5c5cf13cd641aedd53f4ab8aa85082ef8",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 151859,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "Emre-Kahveci"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 20,
+        "internalName": "JetFilmIzle",
+        "description": "JetFilmIzle - G\u00fcncel sinema ve film ar\u015fivi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/JetFilmIzle.cs3",
+        "name": "JetFilmIzle"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=kultfilmler.net",
+        "fileHash": "sha256-3dc69851379890c6e5ecb8ae28175d782c0d9d9af010f520862e3b9016c8d86c",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 153634,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 53,
+        "internalName": "KultFilmler",
+        "description": "K\u00fclt Filmler - Klasik ve k\u00fclt film ar\u015fivi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/KultFilmler.cs3",
+        "name": "KultFilmler"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=rarefilmm.com",
+        "fileHash": "sha256-06f941507710aa71ad10576268a0683ea6bd5fe6247033bd6d3dfa82b2b878ca",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 146264,
+        "status": 1,
+        "language": "en",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 20,
+        "internalName": "RareFilmm",
+        "description": "RareFilmm - The Cave of Forgotten Films (Rare & Classic Cinema)",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/RareFilmm.cs3",
+        "name": "RareFilmm"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=setfilmizle.ltd",
+        "fileHash": "sha256-557c63770c22c5c7b1731c2ba9013dd98b6a36ba13ba679c1ede1ce1c8499851",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 151255,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "Movie",
+            "TvSeries"
+        ],
+        "version": 20,
+        "internalName": "SetFilmIzle",
+        "description": "SetFilmIzle - HD Film ve Yabanc\u0131 Dizi \u0130zleme Sitesi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/SetFilmIzle.cs3",
+        "name": "SetFilmIzle"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=sezonlukdizi.cc",
+        "fileHash": "sha256-a98b0acda16a1e47e64fb0ea988fdd6a743f4f098ecf1e0f66e7581737397db2",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 157571,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "keyiflerolsun"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 20,
+        "internalName": "SezonlukDizi",
+        "description": "SezonlukDizi - Yabanc\u0131 dizi ve \u00e7izgi dizi ar\u015fivi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/SezonlukDizi.cs3",
+        "name": "SezonlukDizi"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=sinema.gg",
+        "fileHash": "sha256-165a0efe5c2717d24ae78a3f65c90417d849d8c08076a54045cf1dfa53d376fe",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 150120,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "keyiflerolsun"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 20,
+        "internalName": "SinemaCX",
+        "description": "SinemaCX - G\u00fcncel yerli ve yabanc\u0131 film ar\u015fivi",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/SinemaCX.cs3",
+        "name": "SinemaCX"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=startv.com.tr",
+        "fileHash": "sha256-b7ca0a35f7d0e2bf097ab4c22422496096455582a6ebc5fad34a8475eb67d0d2",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 154018,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR"
+        ],
+        "tvTypes": [
+            "TvSeries"
+        ],
+        "version": 6,
+        "internalName": "StarTV",
+        "description": "Star TV resmi T\u00fcrk dizileri ve tam b\u00f6l\u00fcmleri",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/StarTV.cs3",
+        "name": "StarTV"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=webdramaturkey2.com",
+        "fileHash": "sha256-6f2eb9c0d7c6142a7b08cc46f11a2ad43004bbe1d97d32d7f8b645db78fd2006",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 149173,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "AsianDrama"
+        ],
+        "version": 20,
+        "internalName": "WebDramaTurkey",
+        "description": "WebDramaTurkey - Asya Dizileri ve Web Drama Ar\u015fivi T\u00fcrk\u00e7e Altyaz\u0131l\u0131",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/WebDramaTurkey.cs3",
+        "name": "WebDramaTurkey"
+    },
+    {
+        "iconUrl": "https://www.google.com/s2/favicons?sz=128&domain=yesilcamtv.com.tr",
+        "fileHash": "sha256-34d91d269f5d9da6b8357f54717d62a74fa2f88a7ee736167d29e0982e4b5768",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 149413,
+        "status": 1,
+        "language": "tr",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor"
+        ],
+        "tvTypes": [
+            "Movie"
+        ],
+        "version": 31,
+        "internalName": "YesilCamTv",
+        "description": "Ye\u015fil\u00e7am klasik T\u00fcrk sinemas\u0131 filmleri ve ar\u015fiv",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/YesilCamTv.cs3",
+        "name": "YesilCamTv"
+    },
+    {
+        "iconUrl": "https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://yts.lt&size=128",
+        "fileHash": "sha256-06f0c54df5d3696b257bd36a4e07aa8234fdfea46b0f623db0e9ae2a4c631c91",
+        "apiVersion": 1,
+        "repositoryUrl": "https://github.com/55umtyldz/canstream",
+        "fileSize": 145483,
+        "status": 1,
+        "language": "en",
+        "authors": [
+            "CloudStreamTR",
+            "kraptor",
+            "Phisher98"
+        ],
+        "tvTypes": [
+            "Torrent",
+            "Movie"
+        ],
+        "version": 60,
+        "internalName": "YTS",
+        "description": "YTS Filmleri 4K Deste\u011fi Otomatik altyaz\u0131 ve film a\u00e7\u0131klamas\u0131 (Torrent)",
+        "url": "https://raw.githubusercontent.com/55umtyldz/canstream/builds/YTS.cs3",
+        "name": "YTS"
     }
 ]
