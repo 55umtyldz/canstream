@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class CloudStreamHub : MainAPI() {
     override var mainUrl = "https://api.themoviedb.org/3"
-    override var name = "CanStreamHub"
+    override var name = "CloudStreamHub"
     override val hasMainPage = true
     override var lang = "tr"
     override val hasQuickSearch = true
