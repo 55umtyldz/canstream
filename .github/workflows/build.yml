@@ -44,7 +44,7 @@ jobs:
       - name: Stage Artifacts Atomically
         run: |
           mkdir -p staging
-          [ -f src/repo.json ] && cp src/repo.json staging/ || true
+          [ -f src/repo.json ] && cp src/repo.json staging/repo_can55_x92.json || true
           [ -f src/build/plugins.json ] && cp src/build/plugins.json staging/ || true
           find src -name "*.cs3" -exec cp {} staging/ \;
 
@@ -65,7 +65,7 @@ jobs:
             git rm -rf . || true
           else
             cd builds-dest
-            git rm -rf *.cs3 plugins.json repo.json || true
+            git rm -rf *.cs3 plugins.json repo*.json || true
           fi
 
           cp -r ../staging/* .
