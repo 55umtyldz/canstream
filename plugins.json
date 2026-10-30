@@ -1,10 +1,10 @@
 [
     {
         "iconUrl": "https://raw.githubusercontent.com/55umtyldz/canstream/main/assets/icon.png",
-        "fileHash": "sha256-a497c9d151e456471099b061859d261ac958ef59f24442800e9a5da1de849f95",
+        "fileHash": "sha256-c2f87913555adfb996db6a4fa3a4e3739f755b137b3d8447e4f2dad07a72a1a1",
         "apiVersion": 1,
         "repositoryUrl": "https://github.com/55umtyldz/canstream",
-        "fileSize": 490142,
+        "fileSize": 492000,
         "status": 1,
         "language": "tr",
         "authors": [
