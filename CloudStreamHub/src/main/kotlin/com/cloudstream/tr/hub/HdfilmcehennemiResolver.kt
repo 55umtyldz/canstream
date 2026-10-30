@@ -3,17 +3,18 @@ package com.cloudstream.tr.hub
 import com.cloudstream.tr.core.extractors.CloseLoadExtractor
 import com.cloudstream.tr.core.network.SafeHttpClient
 import com.cloudstream.tr.core.network.StreamValidator
+import com.cloudstream.tr.core.network.DynamicDomainResolver
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
-import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.Jsoup
 import java.util.regex.Pattern
 
 object HdfilmcehennemiResolver {
-    private const val MAIN_URL = "https://www.hdfilmcehennemi.nl"
+    private var mainUrl = "https://www.hdfilmcehennemi.nl"
+    private const val PROVIDER_NAME = "HDFilmCehennemi"
     private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     data class SearchApiResponse(
@@ -29,77 +30,110 @@ object HdfilmcehennemiResolver {
         episode: Int?,
         callback: (ExtractorLink) -> Unit
     ) {
-        val searchTitles = listOfNotNull(originalTitle, title).distinct()
-        for (q in searchTitles) {
+        try {
+            mainUrl = DynamicDomainResolver.resolve(PROVIDER_NAME, mainUrl)
+        } catch (_: Exception) {}
+
+        val sNum = season ?: 1
+        val epNum = episode ?: 1
+        val searchQueries = listOfNotNull(originalTitle, title).distinct()
+
+        for (query in searchQueries) {
             try {
+                // 1. Sitenin kendi kullandığı fetch arama API'si
+                val searchUrl = "$mainUrl/search?q=$query"
                 val res = app.get(
-                    "$MAIN_URL/search?q=$q",
+                    searchUrl,
                     headers = mapOf(
                         "User-Agent" to USER_AGENT,
                         "X-Requested-With" to "fetch",
-                        "Content-Type" to "application/json"
+                        "Content-Type" to "application/json",
+                        "Referer" to "$mainUrl/"
                     )
                 ).parsedSafe<SearchApiResponse>()
 
-                val candidateUrls = mutableListOf<String>()
+                val matchedShowUrls = mutableListOf<String>()
+
                 for (rawHtml in res?.results.orEmpty()) {
                     val doc = Jsoup.parse(rawHtml)
-                    val a = doc.selectFirst("a.search-result") ?: continue
+                    val a = doc.selectFirst("a.search-result") ?: doc.selectFirst("a") ?: continue
                     val href = a.attr("href")
-                    if (isMovie && !href.contains("/dizi/")) {
-                        candidateUrls.add(if (href.startsWith("http")) href else "$MAIN_URL$href")
-                    } else if (!isMovie && href.contains("/dizi/")) {
-                        candidateUrls.add(if (href.startsWith("http")) href else "$MAIN_URL$href")
+                    val isTv = href.contains("/dizi/")
+
+                    if ((isMovie && !isTv) || (!isMovie && isTv)) {
+                        val fullUrl = if (href.startsWith("http")) href else "$mainUrl${if (href.startsWith("/")) "" else "/"}$href"
+                        matchedShowUrls.add(fullUrl)
                     }
                 }
 
-                for (targetUrl in candidateUrls) {
-                    val pageDoc = app.get(targetUrl, headers = mapOf("User-Agent" to USER_AGENT)).document
-
-                    val streamPageUrl: String? = if (isMovie) {
-                        targetUrl
-                    } else {
-                        var matchedEpUrl: String? = null
-                        for (a in pageDoc.select("div.seasons-tab-content a.mini-poster, div.seasons a[href*='bolum']")) {
-                            val epHref = a.attr("href")
-                            val epTitle = a.selectFirst(".mini-poster-title")?.text()?.trim() ?: a.text().trim()
-                            val sMatch = Regex("""(\d+)\.\s*Sezon""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull() ?: 1
-                            val eMatch = Regex("""(\d+)\.\s*B[öo]l[üu]m""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull() ?: 1
-
-                            if (sMatch == (season ?: 1) && eMatch == (episode ?: 1)) {
-                                matchedEpUrl = if (epHref.startsWith("http")) epHref else "$MAIN_URL$epHref"
-                                break
+                // Eğer API sonuç vermezse HTML aramasını dene
+                if (matchedShowUrls.isEmpty()) {
+                    try {
+                        val htmlDoc = app.get("$mainUrl/?s=$query", headers = mapOf("User-Agent" to USER_AGENT)).document
+                        for (el in htmlDoc.select("a.poster, a.card, div.poster a")) {
+                            val href = el.attr("href")
+                            val isTv = href.contains("/dizi/")
+                            if ((isMovie && !isTv) || (!isMovie && isTv)) {
+                                val fullUrl = if (href.startsWith("http")) href else "$mainUrl${if (href.startsWith("/")) "" else "/"}$href"
+                                matchedShowUrls.add(fullUrl)
                             }
                         }
-                        matchedEpUrl
+                    } catch (_: Exception) {}
+                }
+
+                for (showUrl in matchedShowUrls.distinct()) {
+                    val targetPageUrls = mutableListOf<String>()
+
+                    if (isMovie) {
+                        targetPageUrls.add(showUrl)
+                    } else {
+                        try {
+                            val showDoc = app.get(showUrl, headers = mapOf("User-Agent" to USER_AGENT)).document
+                            for (a in showDoc.select("div.seasons-tab-content a.mini-poster, div.seasons a[href*='bolum']")) {
+                                val epHref = a.attr("href")
+                                val epTitle = a.selectFirst(".mini-poster-title")?.text()?.trim() ?: a.text().trim()
+
+                                val sMatch = Regex("""(\d+)\.\s*Sezon""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+                                val eMatch = Regex("""(\d+)\.\s*B[öo]l[üu]m""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+
+                                if (sMatch == sNum && eMatch == epNum) {
+                                    val fullEpHref = if (epHref.startsWith("http")) epHref else "$mainUrl${if (epHref.startsWith("/")) "" else "/"}$epHref"
+                                    targetPageUrls.add(fullEpHref)
+                                }
+                            }
+                        } catch (_: Exception) {}
                     }
 
-                    if (streamPageUrl != null) {
-                        extractFromPage(streamPageUrl, callback)
-                        return
+                    for (pageUrl in targetPageUrls.distinct()) {
+                        extractStreams(pageUrl, callback)
                     }
+
+                    if (targetPageUrls.isNotEmpty()) break
                 }
             } catch (_: Exception) {}
         }
     }
 
-    private suspend fun extractFromPage(pageUrl: String, callback: (ExtractorLink) -> Unit) {
+    private suspend fun extractStreams(pageUrl: String, callback: (ExtractorLink) -> Unit) {
         try {
-            val doc = app.get(pageUrl, headers = mapOf("User-Agent" to USER_AGENT)).document
+            val doc = app.get(pageUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to "$mainUrl/")).document
             val iframes = mutableListOf<String>()
-            for (iframe in doc.select("iframe")) {
-                val src = iframe.attr("data-src").ifEmpty { iframe.attr("src") }
+
+            for (iframe in doc.select("iframe, [data-frame]")) {
+                val src = iframe.attr("data-frame").ifEmpty { iframe.attr("data-src").ifEmpty { iframe.attr("src") } }
                 if (src.isNotBlank() && !src.contains("youtube.com") && !src.contains("youtu.be")) {
-                    iframes.add(if (src.startsWith("http")) src else if (src.startsWith("//")) "https:$src" else "$MAIN_URL/$src")
+                    val fixed = if (src.startsWith("http")) src else if (src.startsWith("//")) "https:$src" else "$mainUrl${if (src.startsWith("/")) "" else "/"}$src"
+                    iframes.add(fixed)
                 }
             }
 
             for (iframeUrl in iframes.distinct()) {
-                val host = Regex("""https?://[^/]+""").find(iframeUrl)?.value ?: MAIN_URL
+                val host = Regex("""https?://[^/]+""").find(iframeUrl)?.value ?: mainUrl
                 val headers = SafeHttpClient.defaultHeaders(referer = pageUrl)
                 val rawHtml = app.get(iframeUrl, headers = headers).document.html()
 
                 var streamUrl = CloseLoadExtractor.extractStreamUrl(rawHtml)
+
                 if (streamUrl.isNullOrBlank()) {
                     val arrMatcher = Pattern.compile("\\[\\s*\"[^\\]]+\"\\s*\\]").matcher(rawHtml)
                     while (arrMatcher.find()) {
@@ -117,16 +151,18 @@ object HdfilmcehennemiResolver {
 
                 if (!streamUrl.isNullOrBlank()) {
                     val fullStream = if (streamUrl.startsWith("http")) streamUrl else if (streamUrl.startsWith("//")) "https:$streamUrl" else "$host/$streamUrl"
+
                     val preflight = StreamValidator.validateStream(
                         url = fullStream,
                         headers = mapOf("Referer" to "$host/"),
-                        provider = "HDFilmCehennemi"
+                        provider = PROVIDER_NAME
                     )
-                    if (preflight.isValid) {
+
+                    if (preflight.isValid || preflight.status == com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE) {
                         callback(
                             newExtractorLink(
-                                source = "HDFilmCehennemi",
-                                name = "HDFilmCehennemi [TR Dublaj / Dual]",
+                                source = PROVIDER_NAME,
+                                name = "HDFilmCehennemi [TR Dublaj / DUAL]",
                                 url = fullStream,
                                 type = preflight.streamType
                             ) {
