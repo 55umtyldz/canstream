@@ -77,12 +77,9 @@ class CloudStreamHub : MainAPI() {
     ) }
 
     override val mainPage: List<MainPageData>
-        get() = HubHomePreferences.filtered(availableHomePages)
+        get() = availableHomePages
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        if (!HubHomePreferences.isVisible(request.name)) {
-            return newHomePageResponse(request.name, emptyList(), hasNext = false)
-        }
         val targetUrl = "${request.data}&page=${page}"
         val resp = app.get(targetUrl, headers = authHeaders).parsedSafe<TmdbPageResponse>()
         val items = resp?.results?.mapNotNull { parseTmdbItem(it) } ?: emptyList()
