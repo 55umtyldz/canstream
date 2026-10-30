@@ -312,6 +312,7 @@ class CloudStreamHub : MainAPI() {
                     callback = subtitleCallback
                 )
             }
+
             val directJob = launch {
                 val originStart = System.nanoTime()
                 val budget = HubAdaptiveTimeout.limit("direct", HubSourceBudget.DIRECT_DISCOVERY_MS)
@@ -326,18 +327,6 @@ class CloudStreamHub : MainAPI() {
                             imdbId = payload.imdbId
                         ).forEach(interceptedCallback)
                     } catch (e: CancellationException) { throw e } catch (_: Exception) {}
-
-                    try {
-                        HdfilmcehennemiResolver.resolve(
-                            title = payload.title,
-                            originalTitle = payload.originalTitle,
-                            year = payload.year,
-                            isMovie = payload.isMovie,
-                            season = payload.season,
-                            episode = payload.episode,
-                            callback = interceptedCallback
-                        )
-                    } catch (e: CancellationException) { throw e } catch (_: Exception) {}
                 }
                 val elapsed = (System.nanoTime() - originStart) / 1_000_000
                 HubAdaptiveTimeout.observe("direct", elapsed, completed)
@@ -347,6 +336,23 @@ class CloudStreamHub : MainAPI() {
                     message = "Direct source discovery exceeded adaptive time budget."
                 )
             }
+
+            val hdfcJob = launch(Dispatchers.IO) {
+                try {
+                    HdfilmcehennemiResolver.resolve(
+                        title = payload.title,
+                        originalTitle = payload.originalTitle,
+                        year = payload.year,
+                        isMovie = payload.isMovie,
+                        season = payload.season,
+                        episode = payload.episode,
+                        callback = interceptedCallback
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {}
+            }
+
             val torrentJob = launch {
                 val imdbId = payload.imdbId ?: com.cloudstream.tr.core.resolvers.SubtitlesResolver.resolveImdbId(
                     payload.originalTitle ?: payload.title, payload.year, payload.isMovie
@@ -637,6 +643,7 @@ class CloudStreamHub : MainAPI() {
             )
             torrentJob.join()
             directJob.join()
+            hdfcJob.join()
             try { subtitleJob.join() } catch (_: Exception) {}
             val freshFederation = federationTorrents.toList()
             collector.torrents(freshFederation + HubTorrentSelector.cachedFallback(
