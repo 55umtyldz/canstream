@@ -1,4 +1,4 @@
-version = 42
+version = 43
 
 dependencies {
     // Official host SDK: compile-only; host player/action classes stay in CloudStream.
@@ -6,12 +6,12 @@ dependencies {
 }
 
 cloudstream {
-    authors     = listOf("CloudStreamTR", "Emre-Kahveci")
+    authors     = listOf("Umut Can")
     language    = "tr"
-    description = "CloudStreamHub Aggregator - TMDB Keşif & CloudStream Sağlayıcılarını Birleştiren Eklenti"
+    description = "CanStreamHub — TMDB Keşif & Torrentio 4K + Yerli Kaynak Çözücü"
     status      = 1
     tvTypes     = listOf("Movie", "TvSeries", "Anime", "AnimeMovie", "Cartoon", "Documentary")
-    iconUrl     = "https://raw.githubusercontent.com/Emre-Kahveci/CloudStreamHub/main/assets/icon.png"
+    iconUrl     = "https://raw.githubusercontent.com/55umtyldz/canstream/main/assets/icon.png"
 }
 
 // Project dependencies compile against provider modules but do not place their classes
