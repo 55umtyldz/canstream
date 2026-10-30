@@ -13,16 +13,9 @@ val ignoredDirs = listOf(
     "core"
 )
 
-val disabled = listOf(
-    "CizgiMax",
-    "DDizi",
-    "DiziLife",
-    "DiziMom",
-    "DiziPal",
-    "FilmHane",
-    "FilmModu",
-    "Sinewix",
-    "TurkAnime"
+rootProject.name = "canstream"
+
+include(":CloudStreamHub")
 )
 
 File(rootDir, ".").eachDir { dir ->
