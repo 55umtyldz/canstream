@@ -1,12 +1,11 @@
 version = 43
 
 dependencies {
-    // Official host SDK: compile-only; host player/action classes stay in CloudStream.
     add("cloudstream", "com.lagradost.cloudstream3:cloudstream:pre-release")
 }
 
 cloudstream {
-    authors     = listOf("Umut Can")
+    authors     = listOf("Umut Can Yıldız")
     language    = "tr"
     description = "CanStreamHub — TMDB Keşif & Torrentio 4K + Yerli Kaynak Çözücü"
     status      = 1
@@ -14,8 +13,6 @@ cloudstream {
     iconUrl     = "https://raw.githubusercontent.com/55umtyldz/canstream/main/assets/icon.png"
 }
 
-// Project dependencies compile against provider modules but do not place their classes
-// in CloudStreamHub's standalone .cs3. Compile the provider sources into the hub artifact.
 val bundledProviderModules = listOf(
     "FilmMakinesi",
     "HDFilmCehennemi",
@@ -43,10 +40,13 @@ val bundledProviderModules = listOf(
 
 val copyBundledProviderSources = tasks.register<Copy>("copyBundledProviderSources") {
     bundledProviderModules.forEach { moduleName ->
-        into(moduleName) {
-            from(project(":$moduleName").fileTree("src/main/kotlin") {
-                exclude("**/*Plugin.kt")
-            })
+        val providerDir = rootProject.file("$moduleName/src/main/kotlin")
+        if (providerDir.exists()) {
+            into(moduleName) {
+                from(providerDir) {
+                    exclude("**/*Plugin.kt")
+                }
+            }
         }
     }
     into(layout.buildDirectory.dir("generated/hubProviderSources"))
