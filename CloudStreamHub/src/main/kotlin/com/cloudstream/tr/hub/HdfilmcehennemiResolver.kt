@@ -2,18 +2,17 @@ package com.cloudstream.tr.hub
 
 import com.cloudstream.tr.core.extractors.CloseLoadExtractor
 import com.cloudstream.tr.core.network.SafeHttpClient
-import com.cloudstream.tr.core.network.StreamValidator
-import com.cloudstream.tr.core.network.DynamicDomainResolver
 import com.fasterxml.jackson.annotation.JsonProperty
 import com.lagradost.cloudstream3.*
 import com.lagradost.cloudstream3.utils.ExtractorLink
+import com.lagradost.cloudstream3.utils.ExtractorLinkType
 import com.lagradost.cloudstream3.utils.Qualities
 import com.lagradost.cloudstream3.utils.newExtractorLink
 import org.jsoup.Jsoup
 import java.util.regex.Pattern
 
 object HdfilmcehennemiResolver {
-    private var mainUrl = "https://www.hdfilmcehennemi.nl"
+    private const val MAIN_URL = "https://hdfilmcehennemi.nl"
     private const val PROVIDER_NAME = "HDFilmCehennemi"
     private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
@@ -30,51 +29,46 @@ object HdfilmcehennemiResolver {
         episode: Int?,
         callback: (ExtractorLink) -> Unit
     ) {
-        try {
-            mainUrl = DynamicDomainResolver.resolve(PROVIDER_NAME, mainUrl)
-        } catch (_: Exception) {}
-
         val sNum = season ?: 1
         val epNum = episode ?: 1
         val searchQueries = listOfNotNull(originalTitle, title).distinct()
 
         for (query in searchQueries) {
             try {
-                // 1. Sitenin kendi kullandığı fetch arama API'si
-                val searchUrl = "$mainUrl/search?q=$query"
-                val res = app.get(
-                    searchUrl,
-                    headers = mapOf(
-                        "User-Agent" to USER_AGENT,
-                        "X-Requested-With" to "fetch",
-                        "Content-Type" to "application/json",
-                        "Referer" to "$mainUrl/"
-                    )
-                ).parsedSafe<SearchApiResponse>()
-
                 val matchedShowUrls = mutableListOf<String>()
 
-                for (rawHtml in res?.results.orEmpty()) {
-                    val doc = Jsoup.parse(rawHtml)
-                    val a = doc.selectFirst("a.search-result") ?: doc.selectFirst("a") ?: continue
-                    val href = a.attr("href")
-                    val isTv = href.contains("/dizi/")
+                // 1. JSON Arama
+                try {
+                    val res = app.get(
+                        "$MAIN_URL/search?q=$query",
+                        headers = mapOf(
+                            "User-Agent" to USER_AGENT,
+                            "X-Requested-With" to "fetch",
+                            "Referer" to "$MAIN_URL/"
+                        )
+                    ).parsedSafe<SearchApiResponse>()
 
-                    if ((isMovie && !isTv) || (!isMovie && isTv)) {
-                        val fullUrl = if (href.startsWith("http")) href else "$mainUrl${if (href.startsWith("/")) "" else "/"}$href"
-                        matchedShowUrls.add(fullUrl)
+                    for (rawHtml in res?.results.orEmpty()) {
+                        val doc = Jsoup.parse(rawHtml)
+                        val a = doc.selectFirst("a.search-result") ?: doc.selectFirst("a") ?: continue
+                        val href = a.attr("href")
+                        val isTv = href.contains("/dizi/")
+                        if ((isMovie && !isTv) || (!isMovie && isTv)) {
+                            val fullUrl = if (href.startsWith("http")) href else "$MAIN_URL${if (href.startsWith("/")) "" else "/"}$href"
+                            matchedShowUrls.add(fullUrl)
+                        }
                     }
-                }
+                } catch (_: Exception) {}
 
-                // Eğer API sonuç vermezse HTML aramasını dene
+                // 2. HTML Arama (Fallback)
                 if (matchedShowUrls.isEmpty()) {
                     try {
-                        val htmlDoc = app.get("$mainUrl/?s=$query", headers = mapOf("User-Agent" to USER_AGENT)).document
-                        for (el in htmlDoc.select("a.poster, a.card, div.poster a")) {
+                        val htmlDoc = app.get("$MAIN_URL/?s=$query", headers = mapOf("User-Agent" to USER_AGENT, "Referer" to "$MAIN_URL/")).document
+                        for (el in htmlDoc.select("a.poster, a.card, div.poster a, a[href*='/dizi/']")) {
                             val href = el.attr("href")
                             val isTv = href.contains("/dizi/")
                             if ((isMovie && !isTv) || (!isMovie && isTv)) {
-                                val fullUrl = if (href.startsWith("http")) href else "$mainUrl${if (href.startsWith("/")) "" else "/"}$href"
+                                val fullUrl = if (href.startsWith("http")) href else "$MAIN_URL${if (href.startsWith("/")) "" else "/"}$href"
                                 matchedShowUrls.add(fullUrl)
                             }
                         }
@@ -88,20 +82,25 @@ object HdfilmcehennemiResolver {
                         targetPageUrls.add(showUrl)
                     } else {
                         try {
-                            val showDoc = app.get(showUrl, headers = mapOf("User-Agent" to USER_AGENT)).document
-                            for (a in showDoc.select("div.seasons-tab-content a.mini-poster, div.seasons a[href*='bolum']")) {
+                            val showDoc = app.get(showUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to "$MAIN_URL/")).document
+                            for (a in showDoc.select("a[href*='sezon-'][href*='bolum-'], div.seasons-tab-content a, div.seasons a")) {
                                 val epHref = a.attr("href")
-                                val epTitle = a.selectFirst(".mini-poster-title")?.text()?.trim() ?: a.text().trim()
+                                val text = (a.text() + " " + a.attr("title") + " " + epHref).lowercase()
 
-                                val sMatch = Regex("""(\d+)\.\s*Sezon""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull() ?: 1
-                                val eMatch = Regex("""(\d+)\.\s*B[öo]l[üu]m""").find(epTitle)?.groupValues?.get(1)?.toIntOrNull() ?: 1
+                                val matchSeason = text.contains("sezon-$sNum") || text.contains("$sNum. sezon") || text.contains("sezon $sNum")
+                                val matchEpisode = text.contains("bolum-$epNum") || text.contains("$epNum. bolum") || text.contains("$epNum. bölüm") || text.contains("bolum $epNum")
 
-                                if (sMatch == sNum && eMatch == epNum) {
-                                    val fullEpHref = if (epHref.startsWith("http")) epHref else "$mainUrl${if (epHref.startsWith("/")) "" else "/"}$epHref"
+                                if (matchSeason && matchEpisode) {
+                                    val fullEpHref = if (epHref.startsWith("http")) epHref else "$MAIN_URL${if (epHref.startsWith("/")) "" else "/"}$epHref"
                                     targetPageUrls.add(fullEpHref)
                                 }
                             }
                         } catch (_: Exception) {}
+
+                        // Sayfadan yakalanamazsa standart kalıp
+                        if (targetPageUrls.isEmpty()) {
+                            targetPageUrls.add("${showUrl.trimEnd('/')}/sezon-$sNum/bolum-$epNum/")
+                        }
                     }
 
                     for (pageUrl in targetPageUrls.distinct()) {
@@ -116,62 +115,60 @@ object HdfilmcehennemiResolver {
 
     private suspend fun extractStreams(pageUrl: String, callback: (ExtractorLink) -> Unit) {
         try {
-            val doc = app.get(pageUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to "$mainUrl/")).document
+            val doc = app.get(pageUrl, headers = mapOf("User-Agent" to USER_AGENT, "Referer" to "$MAIN_URL/")).document
             val iframes = mutableListOf<String>()
 
-            for (iframe in doc.select("iframe, [data-frame]")) {
-                val src = iframe.attr("data-frame").ifEmpty { iframe.attr("data-src").ifEmpty { iframe.attr("src") } }
+            for (el in doc.select("iframe, [data-frame], [data-src]")) {
+                val src = el.attr("data-frame").ifEmpty { el.attr("data-src").ifEmpty { el.attr("src") } }
                 if (src.isNotBlank() && !src.contains("youtube.com") && !src.contains("youtu.be")) {
-                    val fixed = if (src.startsWith("http")) src else if (src.startsWith("//")) "https:$src" else "$mainUrl${if (src.startsWith("/")) "" else "/"}$src"
+                    val fixed = if (src.startsWith("http")) src else if (src.startsWith("//")) "https:$src" else "$MAIN_URL${if (src.startsWith("/")) "" else "/"}$src"
                     iframes.add(fixed)
                 }
             }
 
             for (iframeUrl in iframes.distinct()) {
-                val host = Regex("""https?://[^/]+""").find(iframeUrl)?.value ?: mainUrl
-                val headers = SafeHttpClient.defaultHeaders(referer = pageUrl)
-                val rawHtml = app.get(iframeUrl, headers = headers).document.html()
+                try {
+                    val host = Regex("""https?://[^/]+""").find(iframeUrl)?.value ?: MAIN_URL
+                    val headers = SafeHttpClient.defaultHeaders(referer = pageUrl)
+                    val rawHtml = app.get(iframeUrl, headers = headers).document.html()
 
-                var streamUrl = CloseLoadExtractor.extractStreamUrl(rawHtml)
+                    var streamUrl = CloseLoadExtractor.extractStreamUrl(rawHtml)
 
-                if (streamUrl.isNullOrBlank()) {
-                    val arrMatcher = Pattern.compile("\\[\\s*\"[^\\]]+\"\\s*\\]").matcher(rawHtml)
-                    while (arrMatcher.find()) {
-                        val arrStr = arrMatcher.group(0) ?: continue
-                        if (arrStr.contains(".jpg") || arrStr.contains(".png") || arrStr.contains(".webp")) continue
-                        try {
-                            val legacyUrl = decodeRapidrame(rawHtml, arrStr)
-                            if (legacyUrl.isNotEmpty() && (legacyUrl.contains(".m3u8") || legacyUrl.contains(".txt") || legacyUrl.contains("/hls/"))) {
-                                streamUrl = legacyUrl
-                                break
-                            }
-                        } catch (_: Exception) {}
+                    if (streamUrl.isNullOrBlank()) {
+                        val arrMatcher = Pattern.compile("\\[\\s*\"[^\\]]+\"\\s*\\]").matcher(rawHtml)
+                        while (arrMatcher.find()) {
+                            val arrStr = arrMatcher.group(0) ?: continue
+                            if (arrStr.contains(".jpg") || arrStr.contains(".png") || arrStr.contains(".webp")) continue
+                            try {
+                                val legacyUrl = decodeRapidrame(rawHtml, arrStr)
+                                if (legacyUrl.isNotEmpty() && (legacyUrl.contains(".m3u8") || legacyUrl.contains(".txt") || legacyUrl.contains("/hls/"))) {
+                                    streamUrl = legacyUrl
+                                    break
+                                }
+                            } catch (_: Exception) {}
+                        }
                     }
-                }
 
-                if (!streamUrl.isNullOrBlank()) {
-                    val fullStream = if (streamUrl.startsWith("http")) streamUrl else if (streamUrl.startsWith("//")) "https:$streamUrl" else "$host/$streamUrl"
+                    if (!streamUrl.isNullOrBlank()) {
+                        val fullStream = when {
+                            streamUrl.startsWith("http") -> streamUrl
+                            streamUrl.startsWith("//") -> "https:$streamUrl"
+                            else -> "${host.trimEnd('/')}/${streamUrl.trimStart('/')}"
+                        }
 
-                    val preflight = StreamValidator.validateStream(
-                        url = fullStream,
-                        headers = mapOf("Referer" to "$host/"),
-                        provider = PROVIDER_NAME
-                    )
-
-                    if (preflight.isValid || preflight.status == com.cloudstream.tr.core.network.ValidationStatus.INDETERMINATE) {
                         callback(
                             newExtractorLink(
                                 source = PROVIDER_NAME,
-                                name = "HDFilmCehennemi [TR Dublaj / DUAL]",
+                                name = "$PROVIDER_NAME [TR Dublaj / DUAL]",
                                 url = fullStream,
-                                type = preflight.streamType
+                                type = if (fullStream.contains(".m3u8") || fullStream.contains("/hls/")) ExtractorLinkType.M3U8 else ExtractorLinkType.VIDEO
                             ) {
                                 this.referer = "$host/"
                                 this.quality = Qualities.P1080.value
                             }
                         )
                     }
-                }
+                } catch (_: Exception) {}
             }
         } catch (_: Exception) {}
     }
