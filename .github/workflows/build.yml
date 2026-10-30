@@ -39,7 +39,7 @@ jobs:
         run: |
           cd src
           chmod +x gradlew
-          ./gradlew make makePluginsJson
+          ./gradlew make makePluginsJson --no-configuration-cache -Dorg.gradle.dependency.verification=lenient
 
       - name: Stage Artifacts Atomically
         run: |
