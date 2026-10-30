@@ -3,6 +3,6 @@
   "description": "CanStreamHub TMDB & Video Çözücü Deposu",
   "manifestVersion": 1,
   "pluginLists": [
-    "https://raw.githubusercontent.com/55umtyldz/canstream/builds/plugins.json"
+    ""https://cdn.jsdelivr.net/gh/55umtyldz/canstream@builds/plugins.json""
   ]
 }
