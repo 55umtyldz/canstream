@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicInteger
 
 class CloudStreamHub : MainAPI() {
     override var mainUrl = "https://api.themoviedb.org/3"
-    override var name = "CloudStreamHub"
+    override var name = "CanStreamHub"
     override val hasMainPage = true
     override var lang = "tr"
     override val hasQuickSearch = true
@@ -43,9 +43,6 @@ class CloudStreamHub : MainAPI() {
         TvType.Documentary
     )
 
-    // TMDB Credential Policy: Public read-only client credential model.
-    // Client-side plugins (.cs3) cannot achieve zero-knowledge secret storage against decompilation.
-    // Tokens are redacted from all diagnostic logs and network traces by DiagnosticLogger.
     private val tmdbApiKey = "90ad3ec891e5923150283b99719d890f"
     private val tmdbToken = "eyJhbGciOiJIUzI1NiJ9.eyJhdWQiOiI5MGFkM2VjODkxZTU5MjMxNTAyODNiOTk3MTlkODkwZiIsIm5iZiI6MTc4OTgxODY1Mi40NzksInN1YiI6IjZhYWU3NzFjOTZlY2VmMDkzYmExZGU4NSIsInNjb3BlcyI6WyJhcGlfcmVhZCJdLCJ2ZXJzaW9uIjoxfQ.2iN-8AMjIO4zMGL60TwvBY0sVdDThmf66GRfkanrtvc"
     private val imageBase = "https://image.tmdb.org/t/p/w500"
@@ -59,21 +56,30 @@ class CloudStreamHub : MainAPI() {
         "${mainUrl}/trending/all/day?language=tr-TR&api_key=${tmdbApiKey}" to "Günün Trendleri",
         "${mainUrl}/movie/popular?language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Filmler",
         "${mainUrl}/tv/popular?language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Diziler",
-        "${mainUrl}/discover/tv?with_origin_country=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Türk Dizileri",
-        "${mainUrl}/movie/top_rated?language=tr-TR&api_key=${tmdbApiKey}" to "En Çok Oy Alan Filmler",
+        "${mainUrl}/discover/tv?with_watch_providers=8&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Netflix Popüler",
+        "${mainUrl}/discover/tv?with_watch_providers=337&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Disney+ Popüler",
+        "${mainUrl}/discover/tv?with_watch_providers=1899&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "HBO Max Popüler",
+        "${mainUrl}/discover/tv?with_watch_providers=350&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Apple TV+ Popüler",
+        "${mainUrl}/discover/tv?with_watch_providers=119&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Amazon Prime Popüler",
+        "${mainUrl}/discover/tv?with_origin_country=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Yerli Diziler",
+        "${mainUrl}/discover/movie?with_original_language=tr&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Yerli Filmler",
+        "${mainUrl}/movie/top_rated?language=tr-TR&api_key=${tmdbApiKey}" to "IMDb Zirvesi (Filmler)",
+        "${mainUrl}/tv/top_rated?language=tr-TR&api_key=${tmdbApiKey}" to "IMDb Zirvesi (Diziler)",
         "${mainUrl}/movie/now_playing?language=tr-TR&api_key=${tmdbApiKey}" to "Vizyondaki Filmler",
-        "${mainUrl}/discover/movie?with_genres=99&language=tr-TR&api_key=${tmdbApiKey}" to "Belgesel Filmler",
+        "${mainUrl}/discover/movie?with_genres=28&language=tr-TR&api_key=${tmdbApiKey}" to "Aksiyon Filmleri",
+        "${mainUrl}/discover/movie?with_genres=878&language=tr-TR&api_key=${tmdbApiKey}" to "Bilim Kurgu Filmleri",
+        "${mainUrl}/discover/movie?with_genres=27&language=tr-TR&api_key=${tmdbApiKey}" to "Korku ve Gerilim Filmleri",
+        "${mainUrl}/discover/movie?with_genres=35&language=tr-TR&api_key=${tmdbApiKey}" to "Komedi Filmleri",
+        "${mainUrl}/discover/movie?with_genres=99&language=tr-TR&api_key=${tmdbApiKey}" to "Belgesel Filmleri",
         "${mainUrl}/discover/tv?with_genres=99&language=tr-TR&api_key=${tmdbApiKey}" to "Belgesel Dizileri",
         "${mainUrl}/discover/movie?with_genres=16&language=tr-TR&api_key=${tmdbApiKey}" to "Animasyon Filmleri",
-        "${mainUrl}/discover/tv?with_genres=16&language=tr-TR&api_key=${tmdbApiKey}" to "Anime ve Animasyon"
+        "${mainUrl}/discover/tv?with_genres=16&with_original_language=ja&language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Animeler"
     ) }
 
-    // The CloudStream host may snapshot this list; reopening the app refreshes it.
     override val mainPage: List<MainPageData>
         get() = HubHomePreferences.filtered(availableHomePages)
 
     override suspend fun getMainPage(page: Int, request: MainPageRequest): HomePageResponse {
-        // Even with a previously captured host tab, no hidden category should fetch TMDB.
         if (!HubHomePreferences.isVisible(request.name)) {
             return newHomePageResponse(request.name, emptyList(), hasNext = false)
         }
@@ -243,7 +249,6 @@ class CloudStreamHub : MainAPI() {
             else collector.direct(link)
         }
 
-        // 0. Zero-Latency Stream Cache Check (instant links)
         val cacheKey = com.cloudstream.tr.core.streaming.StreamCacheManager.buildKey(
             title = payload.title,
             year = payload.year,
@@ -279,18 +284,12 @@ class CloudStreamHub : MainAPI() {
                     .thenBy { it.url }
             )
             val sortedLinks = com.cloudstream.tr.core.model.StreamPrioritySorter.sortByPriority(deterministicLinks)
-            // Direct/CDN stream URLs often contain short-lived signatures.
-            // Only torrent candidates are safe to reuse without re-resolving HTTP media.
             HubTorrentCandidateCache.put(cacheKey, cacheableHubLinks(sortedLinks))
         }
 
         val cachedLinks = HubTorrentCandidateCache.get(cacheKey)
-        // Do not deliver cached magnets through collector.direct(): it drops torrents.
-        // Publish cached candidates only after fresh resolution so they cannot occupy
-        // the limited quality quotas before fresher 4K/REMUX links are considered.
 
         return coroutineScope {
-            // 1. Automated Turkish Subtitles via OpenSubtitles / Stremio
             val subtitleJob = launch(Dispatchers.IO) {
                 com.cloudstream.tr.core.resolvers.SubtitlesResolver.resolveTurkishSubtitles(
                     imdbId = payload.imdbId,
@@ -302,7 +301,6 @@ class CloudStreamHub : MainAPI() {
                     callback = subtitleCallback
                 )
             }
-            // Direct HTTP resolution and federation must not block the torrent pair or each other.
             val directJob = launch {
                 val originStart = System.nanoTime()
                 val budget = HubAdaptiveTimeout.limit("direct", HubSourceBudget.DIRECT_DISCOVERY_MS)
@@ -365,8 +363,6 @@ class CloudStreamHub : MainAPI() {
                             }
                         }
                     }
-                    // Emit the first completed source immediately. A slower YTS/Torrentio
-                    // request must not delay an already available 4K source.
                     val discoveryBudget = HubAdaptiveTimeout.limit("torrent", HubSourceBudget.TORRENT_DISCOVERY_MS)
                     val completed = HubSourceBudget.run(discoveryBudget) {
                     resolveHubSourcesProgressively(
@@ -397,7 +393,6 @@ class CloudStreamHub : MainAPI() {
                         provider = name, stage = DiagnosticStage.LOAD, category = DiagnosticCategory.NETWORK,
                         message = "Torrent discovery exceeded adaptive time budget; completed batches retained."
                     )
-                    // Reuse only candidates from origins that returned no fresh sources.
                     val fallback = HubTorrentSelector.cachedFallback(cachedLinks.orEmpty(), fresh.toList(), true)
                     collector.torrents(fallback)
                 }
@@ -457,7 +452,6 @@ class CloudStreamHub : MainAPI() {
                             val targetLinkData = HubContentRouting.linkData(loadRes, payload)
 
                             if (targetLinkData != null) {
-                                // Hard cap avoids uncontrolled extraction/preflight work on low-RAM TVs.
                                 val channel = Channel<ExtractorLink>(capacity = HubCandidateBudget.MAX_PER_PROVIDER)
                                 val seenUrls = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
                                 val rawLinksReceived = AtomicInteger(0)
@@ -472,9 +466,6 @@ class CloudStreamHub : MainAPI() {
                                 val linksEmitted = AtomicInteger(0)
 
                                 coroutineScope {
-                                    // The provider may return hundreds of links quickly.
-                                    // Limit HTTP verification to three in flight, preserve
-                                    // torrent candidates without unnecessary HTTP preflight.
                                     val verifySlots = Semaphore(3)
                                     val consumerJob = launch {
                                         val checks = mutableListOf<Job>()
@@ -550,8 +541,6 @@ class CloudStreamHub : MainAPI() {
                                                 rawLinksReceived.incrementAndGet()
                                                 when {
                                                     HubCandidateBudget.isFeatureCandidate(rawLink) -> {
-                                                        // Publish the first feature promptly; keep the best
-                                                        // later ones in bounded Top-K rather than first 32.
                                                         if (firstFeature.compareAndSet(false, true)) {
                                                             if (!channel.trySend(rawLink).isSuccess)
                                                                 featureCandidates.offer(rawLink)
@@ -569,11 +558,8 @@ class CloudStreamHub : MainAPI() {
                                         )
                                     } finally {
                                         try {
-                                            // Provider complete: deliver best 31 held feature candidates.
-                                            // No retroactive retraction of previously published sources.
                                             for (feature in featureCandidates.snapshot()) channel.send(feature)
                                         } finally {
-                                            // Avoid host coroutine default-argument bridge.
                                             channel.close(null)
                                         }
                                     }
@@ -633,8 +619,6 @@ class CloudStreamHub : MainAPI() {
             collector.torrents(freshFederation + HubTorrentSelector.cachedFallback(
                 cachedLinks.orEmpty(), collector.snapshot() + freshFederation, false
             ))
-            // If a torrent origin was not reachable during this run, cached candidates
-            // are retained as a fallback; they never preempt fresher sources.
             if (!torrentSourcesEnabled) DiagnosticLogger.log(
                 provider = name, stage = DiagnosticStage.LOAD, category = DiagnosticCategory.SOURCE_DISCOVERY,
                 message = "P2P disabled; cached torrents were not emitted."
