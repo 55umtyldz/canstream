@@ -53,27 +53,41 @@ class CloudStreamHub : MainAPI() {
     )
 
     private val availableHomePages by lazy { mainPageOf(
+        // 1. Genel Akış
         "${mainUrl}/trending/all/day?language=tr-TR&api_key=${tmdbApiKey}" to "Günün Trendleri",
-        "${mainUrl}/movie/popular?language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Filmler",
-        "${mainUrl}/tv/popular?language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Diziler",
-        "${mainUrl}/discover/tv?with_watch_providers=8&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Netflix Popüler",
-        "${mainUrl}/discover/tv?with_watch_providers=337&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Disney+ Popüler",
-        "${mainUrl}/discover/tv?with_watch_providers=1899&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "HBO Max Popüler",
-        "${mainUrl}/discover/tv?with_watch_providers=350&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Apple TV+ Popüler",
-        "${mainUrl}/discover/tv?with_watch_providers=119&watch_region=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Amazon Prime Popüler",
+        "${mainUrl}/movie/now_playing?language=tr-TR&api_key=${tmdbApiKey}" to "Vizyondaki Filmler",
+
+        // 2. Netflix Ayrı Dizi ve Film Kategorileri (with_networks & with_companies)
+        "${mainUrl}/discover/tv?with_networks=213&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Netflix Dizileri",
+        "${mainUrl}/discover/movie?with_companies=178464|81447&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Netflix Filmleri",
+
+        // 3. Disney+ & Marvel Ayrı Dizi ve Film Kategorileri
+        "${mainUrl}/discover/tv?with_networks=2739&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Disney+ Dizileri",
+        "${mainUrl}/discover/movie?with_companies=2|420&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Disney & Marvel Filmleri",
+
+        // 4. HBO Max Dizileri
+        "${mainUrl}/discover/tv?with_networks=49|3186&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "HBO Max Dizileri",
+
+        // 5. Apple TV+ & Amazon Prime
+        "${mainUrl}/discover/tv?with_networks=2552&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Apple TV+ Dizileri",
+        "${mainUrl}/discover/tv?with_networks=1024&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Amazon Prime Dizileri",
+
+        // 6. Yerli Dizi ve Filmler
         "${mainUrl}/discover/tv?with_origin_country=TR&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Yerli Diziler",
         "${mainUrl}/discover/movie?with_original_language=tr&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Yerli Filmler",
-        "${mainUrl}/movie/top_rated?language=tr-TR&api_key=${tmdbApiKey}" to "IMDb Zirvesi (Filmler)",
-        "${mainUrl}/tv/top_rated?language=tr-TR&api_key=${tmdbApiKey}" to "IMDb Zirvesi (Diziler)",
-        "${mainUrl}/movie/now_playing?language=tr-TR&api_key=${tmdbApiKey}" to "Vizyondaki Filmler",
-        "${mainUrl}/discover/movie?with_genres=28&language=tr-TR&api_key=${tmdbApiKey}" to "Aksiyon Filmleri",
-        "${mainUrl}/discover/movie?with_genres=878&language=tr-TR&api_key=${tmdbApiKey}" to "Bilim Kurgu Filmleri",
-        "${mainUrl}/discover/movie?with_genres=27&language=tr-TR&api_key=${tmdbApiKey}" to "Korku ve Gerilim Filmleri",
-        "${mainUrl}/discover/movie?with_genres=35&language=tr-TR&api_key=${tmdbApiKey}" to "Komedi Filmleri",
-        "${mainUrl}/discover/movie?with_genres=99&language=tr-TR&api_key=${tmdbApiKey}" to "Belgesel Filmleri",
-        "${mainUrl}/discover/tv?with_genres=99&language=tr-TR&api_key=${tmdbApiKey}" to "Belgesel Dizileri",
-        "${mainUrl}/discover/movie?with_genres=16&language=tr-TR&api_key=${tmdbApiKey}" to "Animasyon Filmleri",
-        "${mainUrl}/discover/tv?with_genres=16&with_original_language=ja&language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Animeler"
+
+        // 7. IMDb Puanına Göre Kültler
+        "${mainUrl}/discover/movie?sort_by=vote_average.desc&vote_count.gte=1000&language=tr-TR&api_key=${tmdbApiKey}" to "IMDb Kült Filmler",
+        "${mainUrl}/discover/tv?sort_by=vote_average.desc&vote_count.gte=500&language=tr-TR&api_key=${tmdbApiKey}" to "IMDb Kült Diziler",
+
+        // 8. Saf Türler (Çakışmalar without_genres ile engellendi)
+        "${mainUrl}/discover/movie?with_genres=28&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Aksiyon Filmleri",
+        "${mainUrl}/discover/movie?with_genres=878&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Bilim Kurgu Filmleri",
+        "${mainUrl}/discover/movie?with_genres=27&without_genres=35&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Korku ve Gerilim Filmleri",
+        "${mainUrl}/discover/movie?with_genres=35&without_genres=27&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Komedi Filmleri",
+        "${mainUrl}/discover/movie?with_genres=16&without_genres=28&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Animasyon Filmleri",
+        "${mainUrl}/discover/tv?with_genres=16&with_original_language=ja&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Popüler Animeler",
+        "${mainUrl}/discover/tv?with_genres=99&sort_by=popularity.desc&language=tr-TR&api_key=${tmdbApiKey}" to "Belgesel Dizileri"
     ) }
 
     override val mainPage: List<MainPageData>
